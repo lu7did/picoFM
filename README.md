@@ -20,13 +20,12 @@ but essentially the communication happens within the, pretty much, observable ho
 Bands below HF, such as medium frecuencies (300 KHz to 3 Mhz) or even lower (less than 300 KHz) requires power well above the QRP levels
 and/or combined with very specialized antennas.
 
-Having HF as the target band for the project the higher the frequency the larger the distance which can be achieved with QRP power levels,
-however, the hight the frequency the more dependent the actual propagation is from the moment of the day and solar conditions, A great
-deal of information about this topic can be obtained from [here](http://www.arrl.org/propagation-of-rf-signals).
+Having VHF as the target band for the project the distance that can be expected is about the radio horizon, which is fairly similar to the
+visual horizon, therefore with higher antennas the range can be extended. A distance from 5 to 20 Km should be expected even with small power.
 
 At the ham bands communications can be carried using different modes, which is the way the information is "encoded" in the signal. The
 most obvious way is just talking, called Phone in ham parlance. In ham bands Phone communications is carried out using SSB (USB or LSB
-depending on the band), in some higher bands narrow band FM is also used (28 MHz) but this mode is fairly more popular in VHF and
+depending on the band), in some higher bands narrow band FM such as this transceiver is also used (28 MHz) but this mode is fairly more popular in VHF and
 beyond rather than HF. Phone conversations can also be carried using amplitude modulation (AM) like the one used by broadcast radios
 but this mode, even if still used, is relatively inefficient for lower powers and trend not to be much used. Modes not carrying actual
 voice are also fairly popular. The oldest and more traditional is CW where information is sent using Morse code, to many the most
