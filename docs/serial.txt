@@ -1,0 +1,14 @@
+
+
+dmesg | grep tty
+
+Remove the phrase "console=serial0,115200" from the file '/boot/cmdline.txt'.
+Note that this file must only contain 1 line, do not split the line when editing, or try to add comments.
+This prevents Linux sending boot messages to the Serial Port.
+
+sudo systemctl stop serial-getty@ttyS0.service
+sudo systemctl disable serial-getty@ttyS0.service
+
+stty -F /dev/ttyS0 9600 cs8 -cstopb -parenb
+echo -en 'AT+DMOCONNECT\x12\x02' > /dev/ttyS0 //send data
+cat /dev/ttyS0

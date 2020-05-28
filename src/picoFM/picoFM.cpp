@@ -55,7 +55,8 @@
 #include <sstream>
 #include <iomanip>
 #include <assert.h>
-
+#include <termios.h>
+#include <unistd.h>
 //*---- Program specific includes
 #include "./picoFM.h"
 #include "/home/pi/OrangeThunder/src/lib/CallBackTimer.h"
@@ -166,8 +167,7 @@ byte  col=0;
 struct sigaction sigact;
 CallBackTimer* masterTimer;
 
-
-
+char portname[32]; 
 
 //*--------------------------[System Word Handler]---------------------------------------------------
 //* getWord Return status according with the setting of the argument bit onto the SW
@@ -217,6 +217,64 @@ void ISRHandler() {
 
    return;
 
+}
+int
+set_interface_attribs (int fd, int speed, int parity)
+{
+           struct termios tty;
+           memset (&tty, 0, sizeof tty);
+           if (tcgetattr (fd, &tty) != 0)
+           {
+                   fprintf(stderr,"error %d from tcgetattr", errno);
+                   return -1;
+           }
+
+           cfsetospeed (&tty, speed);
+           cfsetispeed (&tty, speed);
+
+           tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;     // 8-bit chars
+           // disable IGNBRK for mismatched speed tests; otherwise receive break
+           // as \000 chars
+           tty.c_iflag &= ~IGNBRK;         // disable break processing
+           tty.c_lflag = 0;                // no signaling chars, no echo,
+                                           // no canonical processing
+           tty.c_oflag = 0;                // no remapping, no delays
+           tty.c_cc[VMIN]  = 0;            // read doesn't block
+           tty.c_cc[VTIME] = 5;            // 0.5 seconds read timeout
+
+           tty.c_iflag &= ~(IXON | IXOFF | IXANY); // shut off xon/xoff ctrl
+
+           tty.c_cflag |= (CLOCAL | CREAD);// ignore modem controls,
+                                           // enable reading
+           tty.c_cflag &= ~(PARENB | PARODD);      // shut off parity
+           tty.c_cflag |= parity;
+           tty.c_cflag &= ~CSTOPB;
+           tty.c_cflag &= ~CRTSCTS;
+
+           if (tcsetattr (fd, TCSANOW, &tty) != 0)
+           {
+                   fprintf(stderr,"error %d from tcsetattr", errno);
+                   return -1;
+           }
+           return 0;
+}
+
+void
+set_blocking (int fd, int should_block)
+{
+           struct termios tty;
+           memset (&tty, 0, sizeof tty);
+           if (tcgetattr (fd, &tty) != 0)
+           {
+                   fprintf(stderr,"error %d from tggetattr", errno);
+                   return;
+           }
+
+           tty.c_cc[VMIN]  = should_block ? 1 : 0;
+           tty.c_cc[VTIME] = 5;            // 0.5 seconds read timeout
+
+           if (tcsetattr (fd, TCSANOW, &tty) != 0)
+                   fprintf(stderr,"error %d setting term attributes", errno);
 }
 
 //*-------------------------------------------------------------------------------------------------
@@ -319,16 +377,21 @@ while(true)
     (TRACE>=0x01 ? fprintf(stderr,"%s:main() Setup GPIO\n",PROGRAMID) : _NOP);
      setupGPIO();
 
-//*     clk (GPIO17)----(rotary encoder)------
-//*     dt  (GPIO18)
-//*
-//*     aux (GPIO10)----(encoder push)--------
-//*     sw  (GPIO27)----(aux button)---------
-//*
-//*
-//*--------------------------------------------------------------------------------------------------------------------
 
+     strcpy(portname,"/dev/ttyS0");
+ int fd = open (portname, O_RDWR | O_NOCTTY | O_SYNC);
+     if (fd < 0)
+     {
+        fprintf(stderr,"error %d opening %s: %s", errno, portname, strerror (errno));
+        exit(16);
+     }
 
+     set_interface_attribs (fd, B9600, 0);  // set speed to 115,200 bps, 8n1 (no parity)
+     set_blocking (fd, 0);                // set no blocking
+
+     write (fd, "AT+DMOCONNECT\r\n", 15); 
+
+char buf [100];
 
 //--------------------------------------------------------------------------------------------------
 // Main program loop
@@ -338,16 +401,25 @@ while(true)
      while(getWord(MSW,RUN)==true) {
 
 //*--- Read and process events coming from the CAT subsystem
+         int n = read (fd, buf, sizeof buf);
+         if (n!=0) {
+           buf[n]=0x00;
+           fprintf(stderr,"Buffer[%s]\n",buf);
+         }
 
          if (getWord(GSW,ECW)==true) {
             setWord(&GSW,ECW,false);
             strcpy(LCD_Buffer,"ECW rotary         ");
             lcd->println(0,0,LCD_Buffer);
+            write(fd,"AT+DMOSETVOLUME=5\r\n",19);
+            fprintf(stderr,"Message DMOSETVOLUME=5 sent\n");
          }
          if (getWord(GSW,ECCW)==true) {
             setWord(&GSW,ECCW,false);
             strcpy(LCD_Buffer,"ECCW rotary        ");
             lcd->println(0,0,LCD_Buffer);
+            write(fd,"AT+DMOSETVOLUME=1\r\n",19);
+            fprintf(stderr,"Message DMOSETVOLUME=1 sent\n");
          }
          if (getWord(GSW,FSW)==true) {
             setWord(&GSW,FSW,false);

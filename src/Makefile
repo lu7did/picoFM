@@ -1,4 +1,4 @@
-all: ../bin/picoFM
+all: ../bin/picoFM 
 
 CCP  = c++
 CC   = cc
@@ -8,9 +8,6 @@ CFLAGS  = -Wall -g -O3 -Wno-unused-variable -lrt -lpthread -lpigpio -I$(INCLUDED
 LIBRPITX = /home/pi/librpitx
 CXYFLAGS = -std=c++11 -Wall -g -O3 -Wno-unused-variable -DLIBCSDR_GPL -DUSE_FFTW -DUSE_IMA_ADPCM -I$(INCLUDEDIR) -I/usr/include/libusb-1.0 
 LDFLAGS = -lm -lrt -lpthread -lwiringPi -lpigpio -L$(LIBDIR) 
-
-
-
 
 LIBDIR=/usr/local/lib
 PP   = /home/pi/PixiePi/src
@@ -35,3 +32,5 @@ clean:
 
 install: all
 	install -m 0755 ../bin/picoFM  /usr/bin
+
+ 
