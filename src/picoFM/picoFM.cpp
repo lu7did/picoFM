@@ -70,7 +70,7 @@
 #include <future>
 #define SIGTERM_MSG "SIGTERM received.\n"
 
-byte  TRACE=0x00;
+byte  TRACE=0x02;
 byte  MSW=0x00;
 byte  GSW=0x00;
 byte  SSW=0x00;
@@ -84,12 +84,13 @@ const char   *PROG_BUILD="00";
 const char   *COPYRIGHT="(c) LU7DID 2018,2020";
 
 
-int   a;
-int   anyargs;
-int   lcd_light;
+int       a;
+int       anyargs;
+int       lcd_light;
 
 LCDLib    *lcd;
 char*     LCD_Buffer;
+char      timestr[32];
 // *----------------------------------------------------------------*
 // *                  GPIO support processing                       *
 // *----------------------------------------------------------------*
@@ -166,7 +167,6 @@ struct sigaction sigact;
 CallBackTimer* masterTimer;
 
 
-#include "./GUI.h"
 
 
 //*--------------------------[System Word Handler]---------------------------------------------------
@@ -203,6 +203,8 @@ static void sighandler(int signum)
    setWord(&MSW,RETRY,true);
 
 }
+#include "./GUI.h"
+
 //--------------------------------------------------------------------------------------------------
 // FT8ISR - interrupt service routine, keep track of the FT8 sequence windows
 //--------------------------------------------------------------------------------------------------
@@ -313,6 +315,10 @@ while(true)
      masterTimer->start(1,ISRHandler);
      TVFO=500;
 
+//*--- Setup GPIO
+    (TRACE>=0x01 ? fprintf(stderr,"%s:main() Setup GPIO\n",PROGRAMID) : _NOP);
+     setupGPIO();
+
 //*     clk (GPIO17)----(rotary encoder)------
 //*     dt  (GPIO18)
 //*
@@ -332,6 +338,28 @@ while(true)
      while(getWord(MSW,RUN)==true) {
 
 //*--- Read and process events coming from the CAT subsystem
+
+         if (getWord(GSW,ECW)==true) {
+            setWord(&GSW,ECW,false);
+            strcpy(LCD_Buffer,"ECW rotary         ");
+            lcd->println(0,0,LCD_Buffer);
+         }
+         if (getWord(GSW,ECCW)==true) {
+            setWord(&GSW,ECCW,false);
+            strcpy(LCD_Buffer,"ECCW rotary        ");
+            lcd->println(0,0,LCD_Buffer);
+         }
+         if (getWord(GSW,FSW)==true) {
+            setWord(&GSW,FSW,false);
+            strcpy(LCD_Buffer,"SW PUSH detected   ");
+            lcd->println(0,0,LCD_Buffer);
+         }
+         if (getWord(GSW,FSWL)==true) {
+            setWord(&GSW,FSWL,false);
+            strcpy(LCD_Buffer,"SW PUSH long       ");
+            lcd->println(0,0,LCD_Buffer);
+         }
+
 
          if (getWord(SSW,FVFO)==true) {
             setWord(&SSW,FVFO,false);
