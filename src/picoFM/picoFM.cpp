@@ -89,6 +89,7 @@ const char   *COPYRIGHT="(c) LU7DID 2018,2020";
 int       a;
 int       anyargs;
 int       lcd_light;
+char      cmd[256];
 
 DRA818V   *dra=nullptr;
 LCDLib    *lcd=nullptr;
@@ -324,6 +325,18 @@ while(true)
 
     dra=new DRA818V(NULL);
     dra->start();
+    dra->setRFW(146.00);
+    dra->setTFW(146.00);
+    dra->setVol(5);
+    dra->setGBW(0);
+    dra->setPEF(false);
+    dra->setHPF(false);
+    dra->setLPF(false);
+    dra->setSQL(5);
+
+    dra->sendSetGroup();
+    dra->sendSetVolume();
+    dra->sendSetFilter();
 
 char buf [100];
 
@@ -336,24 +349,26 @@ char buf [100];
 
 //*--- Read and process events coming from the CAT subsystem
          
-         int n = dra->read_data(buf,100);
-         if (n!=0) {
-           buf[n]=0x00;
-           fprintf(stderr,"Buffer[%s]\n",buf);
-         }
-
+      //   int n = dra->read_data(buf,100);
+      //   if (n!=0) {
+      //     buf[n]=0x00;
+      //     fprintf(stderr,"Buffer[%s]\n",buf);
+      //   }
+         dra->processCommand();
          if (getWord(GSW,ECW)==true) {
             setWord(&GSW,ECW,false);
             strcpy(LCD_Buffer,"ECW rotary         ");
             lcd->println(0,0,LCD_Buffer);
-            write(fd,"AT+DMOSETVOLUME=5\r\n",19);
+            sprintf(cmd,"AT+DMOSETVOLUME=5");
+            dra->send_data(cmd);
             fprintf(stderr,"Message DMOSETVOLUME=5 sent\n");
          }
          if (getWord(GSW,ECCW)==true) {
             setWord(&GSW,ECCW,false);
             strcpy(LCD_Buffer,"ECCW rotary        ");
             lcd->println(0,0,LCD_Buffer);
-            write(fd,"AT+DMOSETVOLUME=1\r\n",19);
+            sprintf(cmd,"AT+DMOSETVOLUME=1");
+            dra->send_data(cmd);
             fprintf(stderr,"Message DMOSETVOLUME=1 sent\n");
          }
          if (getWord(GSW,FSW)==true) {

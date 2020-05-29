@@ -24,7 +24,7 @@ CXXFLAGS = -std=c++11 -Wall -g -O2 -Wno-unused-variable -DLIBCSDR_GPL -DUSE_FFTW
 OSC_CFLAGS=-DOSCILLATOR_Z -DOSCILLATOR_D
 
 
-../bin/picoFM : picoFM/picoFM.cpp picoFM/picoFM.h
+../bin/picoFM : picoFM/picoFM.cpp picoFM/picoFM.h lib/DRA818V.h
 	$(CCP) $(OSC_CFLAGS) $(CXYFLAGS) -o ../bin/picoFM picoFM/picoFM.cpp  $(LDFLAGS)
 
 clean:
