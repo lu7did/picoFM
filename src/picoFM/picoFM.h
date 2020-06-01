@@ -55,8 +55,6 @@
 #define VOX_MIN          0.0
 #define VOX_MAX         10.0
 
-
-
 #define ONESEC       1
 
 //*--- Sound related definitions
@@ -69,13 +67,14 @@
 
 #define MAXGPIO 	32
 
-#define GPIO_DDS     4
+//#define GPIO_DDS     4
 #define GPIO_PTT    12
-#define GPIO_LEFT   13
-#define GPIO_RIGHT  15
-#define GPIO_KEYER  16
-#define GPIO_COOLER 24
-#define GPIO_AUX    20
+#define GPIO_MICPTT 13
+
+#define GPIO_HL     16
+#define GPIO_PD     19
+#define GPIO_SQL    20
+
 #define GPIO_PA     21
 #define GPIO_CLK    17    // pin 11
 #define GPIO_DT     18    // pin 12 
@@ -90,14 +89,6 @@
 #define GPIO_LP      1
 
 #define BUFSIZE     1024
-#define RTLSIZE     2048
-#define GENSIZE     2048
-//#define IQBURST     4096
-
-
-#define IQSR        6000
-#define DECIMATION     1
-
 #define UNDEFINED     -1
 
 #define NODEBUG        0
@@ -122,8 +113,8 @@
 #define ECCW      0B00000010
 #define FSW       0B00000100
 #define FSWL      0B00001000
-#define FAUX      0B00010000
-#define FAUXL     0B00100000
+#define FPTT      0B00010000
+#define FSQ       0B00100000
 #define FGUI      0B01000000
 #define FBLINK    0B10000000
 

@@ -110,6 +110,55 @@ void updateSW(int gpio, int level, uint32_t tick)
      startPush = std::chrono::system_clock::now();
      int pushSW=gpioRead(GPIO_SW);
 }
+//*--------------------------[Rotary Encoder Interrupt Handler]--------------------------------------
+//* Interrupt handler routine for Rotary Encoder Push button
+//*--------------------------------------------------------------------------------------------------
+void updateSQL(int gpio, int level, uint32_t tick)
+{
+
+     if (level != 0) {
+        endSQL = std::chrono::system_clock::now();
+        int lapSQL=std::chrono::duration_cast<std::chrono::milliseconds>(endSQL - startSQL).count();
+        if (getWord(GSW,FSQ)==true) {
+           (TRACE>=0x02 ? fprintf(stderr,"%s:updateSQL() Last SQL signal pending processsing, ignored!\n",PROGRAMID) : _NOP);
+           return;
+        }
+        if (lapSQL < MINSWPUSH) {
+           (TRACE>=0x02 ? fprintf(stderr,"%s:updateSQL() SQL pulsetoo short! ignored!\n",PROGRAMID) : _NOP) ;
+           return;
+        } else {
+           setWord(&GSW,FSQ,true);
+        }
+        return;
+     }
+     startSQL = std::chrono::system_clock::now();
+     int pushSQL=gpioRead(GPIO_SQL);
+}
+//*--------------------------[Rotary Encoder Interrupt Handler]--------------------------------------
+//* Interrupt handler routine for Rotary Encoder Push button
+//*--------------------------------------------------------------------------------------------------
+void updateMICPTT(int gpio, int level, uint32_t tick)
+{
+
+     setBacklight(true);
+     if (level != 0) {
+        endPTT = std::chrono::system_clock::now();
+        int lapPTT=std::chrono::duration_cast<std::chrono::milliseconds>(endPTT - startPTT).count();
+        if (getWord(GSW,FPTT)==true) {
+           (TRACE>=0x02 ? fprintf(stderr,"%s:updateMICPTT() Last signal pending processsing, ignored!\n",PROGRAMID) : _NOP);
+           return;
+        }
+        if (lapPTT < MINSWPUSH) {
+           (TRACE>=0x02 ? fprintf(stderr,"%s:updateMICPTT() PTT pulsetoo short! ignored!\n",PROGRAMID) : _NOP) ;
+           return;
+        } else {
+          setWord(&GSW,FPTT,true);
+        }
+        return;
+     }
+     startPTT = std::chrono::system_clock::now();
+     int pushPTT=gpioRead(GPIO_MICPTT);
+}
 //*--------------------------------------------------------------------------------------------------
 //* setupGPIO setup the GPIO definitions
 //*--------------------------------------------------------------------------------------------------
@@ -123,13 +172,15 @@ void setupGPIO() {
     }
 
 //*---- Configure Encoder
-    (TRACE>=0x03 ? fprintf(stderr,"%s:setupGPIO() Setup Encoder Push\n",PROGRAMID) : _NOP);
+
+    (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() Setup Encoder Push\n",PROGRAMID) : _NOP);
     gpioSetMode(GPIO_SW, PI_INPUT);
     gpioSetPullUpDown(GPIO_SW,PI_PUD_UP);
     gpioSetAlertFunc(GPIO_SW,updateSW);
     usleep(100000);
 
-    (TRACE>=0x03 ? fprintf(stderr,"%s:setupGPIO() Setup Encoder\n",PROGRAMID) : _NOP);
+    (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() Setup Encoder\n",PROGRAMID) : _NOP);
+
     gpioSetMode(GPIO_CLK, PI_INPUT);
     gpioSetPullUpDown(GPIO_CLK,PI_PUD_UP);
     usleep(100000);
@@ -139,7 +190,39 @@ void setupGPIO() {
     gpioSetPullUpDown(GPIO_DT,PI_PUD_UP);
     usleep(100000);
 
-    (TRACE>=0x03 ? fprintf(stderr,"%s:setupGPIO() Setup GPIO Handler\n",PROGRAMID) : _NOP);
+    (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() MIC PTT\n",PROGRAMID) : _NOP);
+
+    gpioSetMode(GPIO_MICPTT, PI_INPUT);
+    gpioSetPullUpDown(GPIO_MICPTT,PI_PUD_UP);
+    usleep(100000);
+    gpioSetISRFunc(GPIO_MICPTT, FALLING_EDGE,0,updateMICPTT);
+
+    (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() SQL\n",PROGRAMID) : _NOP);
+
+    gpioSetMode(GPIO_SQL, PI_INPUT);
+    gpioSetPullUpDown(GPIO_SQL,PI_PUD_UP);
+    usleep(100000);
+    gpioSetISRFunc(GPIO_SQL, FALLING_EDGE,0,updateSQL);
+
+    (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() PTT\n",PROGRAMID) : _NOP);
+
+    gpioSetMode(GPIO_PTT, PI_OUTPUT);
+    gpioSetPullUpDown(GPIO_PTT,PI_PUD_UP);
+    usleep(100000);
+
+    (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() PD\n",PROGRAMID) : _NOP);
+
+    gpioSetMode(GPIO_PD, PI_OUTPUT);
+    gpioSetPullUpDown(GPIO_PD,PI_PUD_UP);
+    usleep(100000);
+
+    (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() HL\n",PROGRAMID) : _NOP);
+
+    gpioSetMode(GPIO_HL, PI_OUTPUT);
+    gpioSetPullUpDown(GPIO_PD,PI_PUD_UP);
+    usleep(100000);
+
+    (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() Setup GPIO signal Handler\n",PROGRAMID) : _NOP);
     for (int i=0;i<64;i++) {
 
         gpioSetSignalFunc(i,sighandler);
@@ -153,6 +236,7 @@ void setupGPIO() {
 //* processGUI()
 //*--------------------------------------------------------------------------------------------------
 void processGUI() {
+
          if (getWord(GSW,ECW)==true) {
             setWord(&GSW,ECW,false);
             strcpy(LCD_Buffer,"ECW rotary         ");
@@ -202,7 +286,7 @@ void setupDRA818V() {
 
 //*---- setup  DRA818V
 
-    d=new DRA818V(NULL);
+    d=new DRA818V(NULL,NULL,NULL);
     d->start();
 
     d->setRFW(f/1000000.0);
@@ -213,13 +297,17 @@ void setupDRA818V() {
     d->setHPF(0);
     d->setLPF(0);
     d->setSQL(sql);
+    d->setPD(bPD);
+    d->setHL(bHL);
+   
 
-    d->setTxCTCSS(d->TonetoCTCSS(100.0));
-    d->setRxCTCSS(d->TonetoCTCSS(100.0));
+    d->setTxCTCSS(d->TonetoCTCSS(tx_ctcss));
+    d->setRxCTCSS(d->TonetoCTCSS(rx_ctcss));
 
     d->sendSetGroup();
     d->sendSetVolume();
     d->sendSetFilter();
 
+    d->setPTT(false);
     return;
 }

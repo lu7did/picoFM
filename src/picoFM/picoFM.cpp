@@ -60,7 +60,9 @@
 //*---- Program specific includes
 #include "./picoFM.h"
 #include "../lib/DRA818V.h"
+#include "/home/pi/OrangeThunder/src/lib/CAT817.h"
 #include "/home/pi/OrangeThunder/src/lib/CallBackTimer.h"
+#include "/home/pi/OrangeThunder/src/lib/genVFO.h"
 #include "/home/pi/PixiePi/src/lib/LCDLib.h"
 #include "/home/pi/PixiePi/src/lib/MMS.h"
 
@@ -93,6 +95,7 @@ char      cmd[256];
 
 DRA818V   *d=nullptr;
 LCDLib    *lcd=nullptr;
+genVFO    *vfo=nullptr;
 
 char*     LCD_Buffer;
 char      timestr[32];
@@ -106,14 +109,17 @@ auto endEncoder=std::chrono::system_clock::now();
 auto startPush=std::chrono::system_clock::now();
 auto endPush=std::chrono::system_clock::now();
 
-auto startAux=std::chrono::system_clock::now();
-auto endAux=std::chrono::system_clock::now();
+//auto startAux=std::chrono::system_clock::now();
+//auto endAux=std::chrono::system_clock::now();
 
-auto startLeft=std::chrono::system_clock::now();
-auto endLeft=std::chrono::system_clock::now();
+//auto startLeft=std::chrono::system_clock::now();
+//auto endLeft=std::chrono::system_clock::now();
 
-auto startRight=std::chrono::system_clock::now();
-auto endRight=std::chrono::system_clock::now();
+auto startPTT=std::chrono::system_clock::now();
+auto endPTT=std::chrono::system_clock::now();
+
+auto startSQL=std::chrono::system_clock::now();
+auto endSQL=std::chrono::system_clock::now();
 
 int value=0;
 int lastEncoded=0;
@@ -162,8 +168,10 @@ char  callsign[16];
 char  grid[16];
 int   backlight=0;
 bool  cooler=false;
-float rx_ctcss=0.0;
-float tx_ctcss=0.0;
+int   rx_ctcss=12;
+int   tx_ctcss=12;
+bool  bPD=false;
+bool  bHL=false;
 
 byte  col=0;
 struct sigaction sigact;
@@ -227,8 +235,13 @@ void print_usage(void)
 {
 
 fprintf(stderr,"\n%s version %s build (%s)\n"
-"Usage:\npicoFMi [-f frequency {Hz}]\n"
-"                [-v Verbose {0..2} default=0}]\n",PROGRAMID,PROG_VERSION,PROG_BUILD);
+"Usage:\npicoFM  [-f frequency {144000000..147999999 Hz}]\n"
+"                [-o offset (+/-Hz) default=0)]\n"
+"                [-v volume (0..8 default=5)]\n"
+"                [-s squelch(0..8 default=5)]\n"
+"                [-r Rx CTCSS (0..38 default=0)]\n"
+"                [-t Tx CTCSS (0..38 default=0)]\n"
+"                [-x Verbose {0..2} default=0}]\n",PROGRAMID,PROG_VERSION,PROG_BUILD);
 
 }
 
@@ -246,18 +259,11 @@ int main(int argc, char* argv[])
         }
      }
 
-
-//     dra[m].SQL=5;
-//     dra[m].Vol=5;
-//     dra[m].RFW=146.0000;
-//     dra[m].OFS=000.0000;
-//     dra[m].TFW=dra[m].RFW+dra[m].OFS;
-
 //*--------- Process arguments to override persistence
 
 while(true)
         {
-                a = getopt(argc, argv, "v:f:h?");
+                a = getopt(argc, argv, "o:s:r:t:x:v:f:hzp?");
 
                 if(a == -1) 
                 {
@@ -274,9 +280,37 @@ while(true)
 
                 case 'f': 
 	                f=atof(optarg);
-                        fprintf(stderr,"%s:main() args(f)=%5.0f\n",PROGRAMID,f);
+                        fprintf(stderr,"%s:main() args(frequency)=%5.0f\n",PROGRAMID,f);
+                        break;
+                case 'o': 
+	                ofs=atof(optarg);
+                        fprintf(stderr,"%s:main() args(offset)=%5.0f\n",PROGRAMID,ofs);
                         break;
                 case 'v':
+                        vol=atoi(optarg);
+                        fprintf(stderr,"%s:main() args(volume)=%d\n",PROGRAMID,vol);
+                        break;
+                case 's':
+                        sql=atoi(optarg);
+                        fprintf(stderr,"%s:main() args(squelch)=%d\n",PROGRAMID,sql);
+                        break;
+                case 'z':
+                        bPD=true;
+                        fprintf(stderr,"%s:main() args(power saving)=%s\n",PROGRAMID,BOOL2CHAR(bPD));
+                        break;
+                case 'p':
+                        bHL=true;
+                        fprintf(stderr,"%s:main() args(power high)=%s\n",PROGRAMID,BOOL2CHAR(bHL));
+                        break;
+                case 't':
+                        tx_ctcss=atoi(optarg);
+                        fprintf(stderr,"%s:main() args(Rx CTCSS)=%04d\n",PROGRAMID,tx_ctcss);
+                        break;
+                case 'r':
+                        tx_ctcss=atoi(optarg);
+                        fprintf(stderr,"%s:main() args(Tx CTCSS)=%04d\n",PROGRAMID,rx_ctcss);
+                        break;
+                case 'x':
                         TRACE=atoi(optarg);
                         fprintf(stderr,"%s:main() args(TRACE)=%d\n",PROGRAMID,TRACE);
                         break;
@@ -292,8 +326,6 @@ while(true)
         }
 
 
-
-
 //*--- Create memory resources
 
     (TRACE>=0x01 ? fprintf(stderr,"%s:main() Memory resources acquired\n",PROGRAMID) : _NOP);
@@ -301,6 +333,7 @@ while(true)
 
 //*--- Define and initialize LCD interface
 
+    (TRACE>=0x01 ? fprintf(stderr,"%s:main() LCD sub-system initialized\n",PROGRAMID) : _NOP);
      setupLCD();
      sprintf(LCD_Buffer,"%s %s(%s)",PROGRAMID,PROG_VERSION,PROG_BUILD);
      lcd->println(0,0,LCD_Buffer);
@@ -314,14 +347,37 @@ while(true)
      masterTimer->start(1,ISRHandler);
      TVFO=500;
 
+    (TRACE>=0x01 ? fprintf(stderr,"%s:main() VFO sub-system initialized\n",PROGRAMID) : _NOP);
+     vfo=new genVFO(NULL,NULL,NULL,NULL);
+     vfo->TRACE=TRACE;
+     vfo->FT817=0x00;
+     vfo->MODE=m;
+     //vfo->POWER=DDS_MAXLEVEL;
+     vfo->setBand(VFOA,vfo->getBand(f));
+     vfo->setBand(VFOB,vfo->getBand(f));
+     vfo->set(VFOA,f);
+     vfo->set(VFOB,f);
+     vfo->setSplit(false);
+     vfo->setRIT(VFOA,false);
+     vfo->setRIT(VFOB,false);
+     vfo->setVFO(VFOA);
+     vfo->setPTT(false);
+     vfo->setLock(false);
+     vfo->setShift(ofs);
+     vfo->setVFOStep(VFOA,VFO_STEP_10KHz);
+     vfo->setVFOStep(VFOB,VFO_STEP_10KHz);
+
 //*--- Setup GPIO
-    (TRACE>=0x01 ? fprintf(stderr,"%s:main() Setup GPIO\n",PROGRAMID) : _NOP);
+
+    (TRACE>=0x01 ? fprintf(stderr,"%s:main() Setup GPIO sub-system\n",PROGRAMID) : _NOP);
      setupGPIO();
 
 
 //*---- setup  DRA818V
-
+    (TRACE>=0x01 ? fprintf(stderr,"%s:main() Setup DRA818V chipset sub-system\n",PROGRAMID) : _NOP);
     setupDRA818V();
+
+
 
 char buf [100];
 
@@ -334,25 +390,40 @@ char buf [100];
 
 //*--- Read and process events coming from the CAT subsystem
 
-         d->processCommand();
-         processGUI();
-         usleep(100000);
+         d->processCommand();    //Process DRA818 responses
+         processGUI();           //Process GUI 
+         usleep(100000);         //Reduce the CPU load by doing it more slowly
 
      }
 
+//*--- Turn off timer sub-system
+
+ (TRACE>=0x00 ? fprintf(stderr,"%s:main() Stopping master timer sub-system\n",PROGRAMID) : _NOP);
+  masterTimer->stop();
+  delete(masterTimer);
+
 //*--- Turn off LCD
 
+ (TRACE>=0x00 ? fprintf(stderr,"%s:main() Stopping LCD sub-system\n",PROGRAMID) : _NOP);
   lcd->backlight(false);
   lcd->setCursor(0,0);
   lcd->clear();
+  delete(lcd);
 
 //*--- Turn off gpio
 
+ (TRACE>=0x00 ? fprintf(stderr,"%s:main() Terminate GPIO sub-system\n",PROGRAMID) : _NOP);
   gpioTerminate();
 
 //*--- Close serial port
 
-  close(fd);
+ (TRACE>=0x00 ? fprintf(stderr,"%s:main() Stopping DRA818V sub-system\n",PROGRAMID) : _NOP);
+  d->stop();
+  delete(d);
+
+ (TRACE>=0x00 ? fprintf(stderr,"%s:main() Stopping VFO sub-system\n",PROGRAMID) : _NOP);
+  delete(vfo);
+
   exit(0);
 }
 

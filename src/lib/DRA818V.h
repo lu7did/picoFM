@@ -38,14 +38,16 @@ typedef void (*CALLBACK)();
 bool getWord (unsigned char SysWord, unsigned char v);
 void setWord(unsigned char* SysWord,unsigned char v, bool val);
 
-#define  SQ      0B00000001
-#define  PT      0B00000010
-#define  READY   0B00000100
-#define  GBW     0B00001000
-#define  PEF     0B00010000
-#define  HPF     0B00100000
-#define  LPF     0B01000000
-#define  HL      0B10000000
+
+#define  GBW     0B00000001
+#define  PEF     0B00000010
+#define  HPF     0B00000100
+#define  LPF     0B00001000
+#define  HL      0B00010000
+#define  PD      0B00100000
+#define  READY   0B01000000
+#define  PT      0B10000000
+
 
 struct DRA818V_response
 {
@@ -78,11 +80,13 @@ class DRA818V {
 
   public: 
   
-         DRA818V(CALLBACK c);
+         DRA818V(CALLBACK ptt,CALLBACK pdt,CALLBACK hlt);
 
 // --- public methods
 
-CALLBACK changeResponse=NULL;
+CALLBACK changePTT=NULL;
+CALLBACK changePD=NULL;
+CALLBACK changeHL=NULL;
 
      int start();
     void stop();
@@ -122,6 +126,12 @@ CALLBACK changeResponse=NULL;
    void  setSQL(byte v);
    void  setSQL(byte m,byte v);
 
+   bool  getPD();
+   void  setPD(bool v);
+
+   bool  getHL();
+   void  setHL(bool v);
+
    int   getVol();
    int   getVol(byte m);
 
@@ -150,9 +160,6 @@ CALLBACK changeResponse=NULL;
 
    bool  getPTT();
    void  setPTT(bool p);
-
-   bool  getSQ();
-   void  setSQ(bool p);
 
    void  sendSetGroup();
    void  sendSetVolume();
@@ -199,10 +206,11 @@ private:
 //---------------------------------------------------------------------------------------------------
 // gpio CLASS Implementation
 //--------------------------------------------------------------------------------------------------
-DRA818V::DRA818V(CALLBACK c){
+DRA818V::DRA818V(CALLBACK ptt,CALLBACK pdt,CALLBACK hlt) {
 
-
-   if (c!=NULL) {changeResponse=c;}
+   if (ptt!=NULL) {changePTT=ptt;}
+   if (pdt!=NULL) {changePD=pdt;}
+   if (hlt!=NULL) {changeHL=hlt;}
 
 // --- initial definitions
 
@@ -374,6 +382,9 @@ int DRA818V::start() {
 //--------------------------------------------------------------------------------------------------
 void DRA818V::stop() {
 
+  close(fd);
+ (TRACE>=0x00 ? fprintf(stderr,"%s::stop() connection with DRA818V chipset terminated\n",PROGRAMID) : _NOP);
+
   return;
 }
 //---------------------------------------------------------------------------------------------------
@@ -544,7 +555,7 @@ int DRA818V::getRxCTCSS() {
 void DRA818V::setRxCTCSS(byte m,int t){
    if (m<0 || m>15) return;
    dra[m].Rx_CTCSS=t;
-   (TRACE>=0x00 ? fprintf(stderr,"%s::setRxCTCSS() CTCSS(%3d)\n",PROGRAMID,t) : _NOP);
+   (TRACE>=0x00 ? fprintf(stderr,"%s::setRxCTCSS() CTCSS(%d)\n",PROGRAMID,t) : _NOP);
    return;   
 }
 //--------------------------------------------------------------------------------------------------
@@ -556,6 +567,28 @@ int DRA818V::getVol(byte m) {
     if (m<0 || m>15) return 0;
    (TRACE>=0x00 ? fprintf(stderr,"%s::getVol() Vol(%d)\n",PROGRAMID,dra[m].Vol) : _NOP);
    return dra[m].Vol;
+}
+//--------------------------------------------------------------------------------------------------
+void DRA818V::setPD(bool v) {
+   setWord(&dra[m].STATUS,PD,v);
+   (TRACE>=0x00 ? fprintf(stderr,"%s::setPD() PD(%s)\n",PROGRAMID,BOOL2CHAR(getWord(dra[m].STATUS,PD))) : _NOP);
+   if(changePD!=NULL) {changePD();}
+   return;
+}
+//--------------------------------------------------------------------------------------------------
+bool DRA818V::getPD() {
+   return getWord(dra[m].STATUS,PD);
+}
+//--------------------------------------------------------------------------------------------------
+void DRA818V::setHL(bool v) {
+   setWord(&dra[m].STATUS,HL,v);
+   (TRACE>=0x00 ? fprintf(stderr,"%s::setHL() HL(%s)\n",PROGRAMID,BOOL2CHAR(getWord(dra[m].STATUS,HL))) : _NOP);
+   if (changeHL!=NULL) {changeHL();}
+   return;
+}
+//--------------------------------------------------------------------------------------------------
+bool DRA818V::getHL() {
+   return getWord(dra[m].STATUS,HL);
 }
 //--------------------------------------------------------------------------------------------------
 int DRA818V::getVol() {
@@ -693,14 +726,6 @@ bool DRA818V::getPTT() {
 //--------------------------------------------------------------------------------------------------
 void DRA818V::setPTT(bool v) {
     setWord(&dra[0].STATUS,PT,v);
-    return;
-}
-//--------------------------------------------------------------------------------------------------
-bool DRA818V::getSQ() {
-    return getWord(dra[0].STATUS,SQ);
-}
-//--------------------------------------------------------------------------------------------------
-void DRA818V::setSQ(bool v) {
-    setWord(&dra[0].STATUS,SQ,v);
+    if (changePTT!=NULL) {changePTT();}
     return;
 }
