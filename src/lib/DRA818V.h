@@ -45,7 +45,7 @@ void setWord(unsigned char* SysWord,unsigned char v, bool val);
 #define  PEF     0B00010000
 #define  HPF     0B00100000
 #define  LPF     0B01000000
-
+#define  HL      0B10000000
 
 struct DRA818V_response
 {
@@ -62,6 +62,7 @@ struct DRA
 {
 
         float    TFW;
+        float    OFS;
         float    RFW;
         int      SQL;
         byte     STATUS;
@@ -157,6 +158,10 @@ CALLBACK changeResponse=NULL;
    void  sendSetVolume();
    void  sendSetFilter();
 
+
+   float CTCSStoTone(byte t);
+   int   TonetoCTCSS(float t);
+
 // -- public attributes
 
     byte TRACE=0x02;
@@ -181,6 +186,10 @@ const char   *PROG_VERSION="1.0";
 const char   *PROG_BUILD="00";
 const char   *COPYRIGHT="(c) LU7DID 2019,2020";
 
+
+float CTCSS[38+1]={0.0,67.0,71.9,74.4,77.0,79.7,82.5,85.4,88.5,91.5,94.8,97.4,100.0,103.5,107.2,110.9,114.8,118.8,123.0,127.3,131.8,136.5,141.3,146.2,151.4,156.7,162.2,167.9,173.8,179.9,186.2,192.8,203.5,210.7,218.1,225.7,233.6,241.8,250.3};
+
+
 private:
 
 
@@ -200,9 +209,40 @@ DRA818V::DRA818V(CALLBACK c){
    setWord(&MSW,RUN,false);
 }
 //---------------------------------------------------------------------------------------------------
+// CTCSStoTone Implementation
+//--------------------------------------------------------------------------------------------------
+float DRA818V::CTCSStoTone(byte t) {
+
+    if (t<0 || t>38) {
+      (TRACE>=0x00 ? fprintf(stderr,"%s:CTCSStoTone() Tone(%d) invalid, ignored!\n",PROGRAMID,t) : _NOP);
+       return 0.0;
+    }
+
+   (TRACE>=0x02 ? fprintf(stderr,"%s:CTCSStoTone() Tone(%d) returning Tone(%3.0f)\n",PROGRAMID,t,CTCSS[t]) : _NOP);
+    return CTCSS[t];
+
+}
+//---------------------------------------------------------------------------------------------------
+// TonetoCTCSS Implementation
+//--------------------------------------------------------------------------------------------------
+int DRA818V::TonetoCTCSS(float t) {
+
+   if (t==0.0) {
+     (TRACE>=0x02 ? fprintf(stderr,"%s:TonetoCTCSS() Tone(%3.0f) is no tone\n",PROGRAMID,t) : _NOP);
+      return 0;
+   }
+
+   for (int i=0;i<39;i++) {
+     if (CTCSS[i]==t) {
+        (TRACE>=0x02 ? fprintf(stderr,"%s:TonetoCTCSS() Tone(%3.0f) found index(%03d)\n",PROGRAMID,t,i) : _NOP);
+         return i;
+     }
+   }
+   return 0.0;
+}
+//---------------------------------------------------------------------------------------------------
 // parseCommand Implementation
 //--------------------------------------------------------------------------------------------------
-
 void DRA818V::parseCommand() {
 
 char  cmd[128];
@@ -313,7 +353,6 @@ int n = read (fd, buffer, len);
 //--------------------------------------------------------------------------------------------------
 int DRA818V::start() {
 
-
      strcpy(portname,"/dev/ttyS0");
      fd = open (portname, O_RDWR | O_NOCTTY | O_SYNC);
      if (fd < 0) {
@@ -401,16 +440,18 @@ void DRA818V::set_blocking (int fd, int should_block)
 //--------------------------------------------------------------------------------------------------
 void DRA818V::sendSetGroup() {
 
-     sprintf(command,"AT+DMOSETGROUP=%d,%3.4f,%3.4f,0000,%d,0000",getWord(dra[m].STATUS,GBW),dra[m].TFW,dra[m].RFW,dra[m].SQL);
+     sprintf(command,"AT+DMOSETGROUP=%d,%3.4f,%3.4f,%04d,%d,%04d",getWord(dra[m].STATUS,GBW),dra[m].TFW,dra[m].RFW,dra[m].Rx_CTCSS,dra[m].SQL,dra[m].Tx_CTCSS);
      this->send_data(command);
 
 }
+//--------------------------------------------------------------------------------------------------
 void DRA818V::sendSetVolume() {
 
      sprintf(command,"AT+DMOSETVOLUME=%d",dra[m].Vol);
      this->send_data(command);
 
 }
+//--------------------------------------------------------------------------------------------------
 void DRA818V::sendSetFilter() {
 
      sprintf(command,"AT+SETFILTER=%d,%d,%d",getWord(dra[m].STATUS,PEF),getWord(dra[m].STATUS,HPF),getWord(dra[m].STATUS,LPF));
@@ -474,15 +515,19 @@ int DRA818V::getTxCTCSS(byte m) {
    return dra[m].Tx_CTCSS;
 }
 //--------------------------------------------------------------------------------------------------
-int DRA818V::getTxCTCSS() {
-   return this->getTxCTCSS(this->m);
-}
-//--------------------------------------------------------------------------------------------------
 void DRA818V::setTxCTCSS(byte m,int t) {
    if (m<0 || m>15) return;
    (TRACE>=0x00 ? fprintf(stderr,"%s::setTxCTCSS() CTCSS(%x)\n",PROGRAMID,t) : _NOP);
    dra[m].Tx_CTCSS=t;
    return;   
+}
+void DRA818V::setTxCTCSS(int t) {
+   this->setTxCTCSS(0,t);
+   return;
+}
+//--------------------------------------------------------------------------------------------------
+int DRA818V::getTxCTCSS() {
+   return this->getTxCTCSS(this->m);
 }
 //--------------------------------------------------------------------------------------------------
 int DRA818V::getRxCTCSS(byte m) {
@@ -499,15 +544,13 @@ int DRA818V::getRxCTCSS() {
 void DRA818V::setRxCTCSS(byte m,int t){
    if (m<0 || m>15) return;
    dra[m].Rx_CTCSS=t;
-   (TRACE>=0x00 ? fprintf(stderr,"%s::getRxCTCSS() CTCSS(%x)\n",PROGRAMID,t) : _NOP);
+   (TRACE>=0x00 ? fprintf(stderr,"%s::setRxCTCSS() CTCSS(%3d)\n",PROGRAMID,t) : _NOP);
    return;   
 }
 //--------------------------------------------------------------------------------------------------
 void DRA818V::setRxCTCSS(int t) {
    return setRxCTCSS(this->m,t);
 }
-
-
 //--------------------------------------------------------------------------------------------------
 int DRA818V::getVol(byte m) {
     if (m<0 || m>15) return 0;
@@ -575,8 +618,6 @@ void DRA818V::setGBW(bool v) {
     return;
 }
 //--------------------------------------------------------------------------------------------------
-
-//--------------------------------------------------------------------------------------------------
 bool DRA818V::getPEF(byte m) {
     if (m<0 || m>15) return false;
    (TRACE>=0x00 ? fprintf(stderr,"%s::getPEF() PEF(%s)\n",PROGRAMID,BOOL2CHAR(getWord(dra[m].STATUS,PEF))) : _NOP);
@@ -624,9 +665,6 @@ void DRA818V::setHPF(bool v) {
     return;
 }
 //--------------------------------------------------------------------------------------------------
-
-
-//--------------------------------------------------------------------------------------------------
 bool DRA818V::getLPF(byte m) {
     if (m<0 || m>15) return false;
    (TRACE>=0x00 ? fprintf(stderr,"%s::getLPF() LPF(%s)\n",PROGRAMID,BOOL2CHAR(getWord(dra[m].STATUS,LPF))) : _NOP);
@@ -652,13 +690,16 @@ void DRA818V::setLPF(bool v) {
 bool DRA818V::getPTT() {
     return getWord(dra[0].STATUS,PT);
 }
+//--------------------------------------------------------------------------------------------------
 void DRA818V::setPTT(bool v) {
     setWord(&dra[0].STATUS,PT,v);
     return;
 }
+//--------------------------------------------------------------------------------------------------
 bool DRA818V::getSQ() {
     return getWord(dra[0].STATUS,SQ);
 }
+//--------------------------------------------------------------------------------------------------
 void DRA818V::setSQ(bool v) {
     setWord(&dra[0].STATUS,SQ,v);
     return;

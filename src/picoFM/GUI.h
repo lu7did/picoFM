@@ -149,3 +149,77 @@ void setupGPIO() {
 
 
 }
+//*--------------------------------------------------------------------------------------------------
+//* processGUI()
+//*--------------------------------------------------------------------------------------------------
+void processGUI() {
+         if (getWord(GSW,ECW)==true) {
+            setWord(&GSW,ECW,false);
+            strcpy(LCD_Buffer,"ECW rotary         ");
+            lcd->println(0,0,LCD_Buffer);
+            sprintf(cmd,"AT+DMOSETVOLUME=5");
+            d->send_data(cmd);
+            fprintf(stderr,"Message DMOSETVOLUME=5 sent\n");
+         }
+
+         if (getWord(GSW,ECCW)==true) {
+            setWord(&GSW,ECCW,false);
+            strcpy(LCD_Buffer,"ECCW rotary        ");
+            lcd->println(0,0,LCD_Buffer);
+            sprintf(cmd,"AT+DMOSETVOLUME=1");
+            d->send_data(cmd);
+            fprintf(stderr,"Message DMOSETVOLUME=1 sent\n");
+         }
+         if (getWord(GSW,FSW)==true) {
+            setWord(&GSW,FSW,false);
+            strcpy(LCD_Buffer,"SW PUSH detected   ");
+            lcd->println(0,0,LCD_Buffer);
+         }
+         if (getWord(GSW,FSWL)==true) {
+            setWord(&GSW,FSWL,false);
+            strcpy(LCD_Buffer,"SW PUSH long       ");
+            lcd->println(0,0,LCD_Buffer);
+         }
+         if (getWord(SSW,FVFO)==true) {
+            setWord(&SSW,FVFO,false);
+            TVFO=2000;
+            lcd->setCursor(col,1);
+            lcd->write(byte(255));         
+            if (col!=0) {
+               strcpy(LCD_Buffer," ");
+               lcd->println(col-1,1,LCD_Buffer);
+            }
+            col++;
+            if (col>15) {col=0;}
+         }
+
+         return;
+}
+//*--------------------------------------------------------------------------------------------------
+//* setupDRA818V setup the DRA818V definitions
+//*--------------------------------------------------------------------------------------------------
+void setupDRA818V() {
+
+//*---- setup  DRA818V
+
+    d=new DRA818V(NULL);
+    d->start();
+
+    d->setRFW(f/1000000.0);
+    d->setTFW(d->getRFW()+(ofs/1000000));
+    d->setVol(vol);
+    d->setGBW(0);
+    d->setPEF(0);
+    d->setHPF(0);
+    d->setLPF(0);
+    d->setSQL(sql);
+
+    d->setTxCTCSS(d->TonetoCTCSS(100.0));
+    d->setRxCTCSS(d->TonetoCTCSS(100.0));
+
+    d->sendSetGroup();
+    d->sendSetVolume();
+    d->sendSetFilter();
+
+    return;
+}

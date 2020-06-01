@@ -91,7 +91,7 @@ int       anyargs;
 int       lcd_light;
 char      cmd[256];
 
-DRA818V   *dra=nullptr;
+DRA818V   *d=nullptr;
 LCDLib    *lcd=nullptr;
 
 char*     LCD_Buffer;
@@ -153,24 +153,21 @@ int  TVFO=0;
 // *----------------------------------------------------------------*
 // *               Initial setup values                             *
 // *----------------------------------------------------------------*
-float f=7030000;
-byte  s=20;
-byte  m=MCW;
+byte  m=MFM;
+float f=147000000.0;
+float ofs=600000.0;
+int   vol=5;
+int   sql=5;
 char  callsign[16];
 char  grid[16];
-byte  l=7;
-int   b=0;
-float x=600.0;
-byte  k=0;
 int   backlight=0;
 bool  cooler=false;
-byte  st=3;
-byte  rev=0;
+float rx_ctcss=0.0;
+float tx_ctcss=0.0;
 
 byte  col=0;
 struct sigaction sigact;
 CallBackTimer* masterTimer;
-
 char portname[32]; 
 
 //*--------------------------[System Word Handler]---------------------------------------------------
@@ -230,18 +227,8 @@ void print_usage(void)
 {
 
 fprintf(stderr,"\n%s version %s build (%s)\n"
-"Usage:\nPixiaPi [-f frequency {Hz}]\n"
-"                [-s keyer speed {5..50 wpm default=20}]\n"
-"                [-S tunning step {0..11 default=3 (100Hz)}]\n"
-"                [-m mode {0=LSB,1=USB,2=CW,3=CWR,4=AM,5=FM,6=WFM,7=PKT,8=DIG default=CW}]\n"
-"                [-c cooler activated {defaul not, argument turns it on!}]\n"
-"                [-r reverse keyer paddles {defaul not}]\n"
-"                [-l {power level (0..7 default=7}]\n"
-"                [-p {CAT port}]\n"
-"                [-v Verbose {0,1,2,3 default=0}]\n"
-"                [-x Shift {600..800Hz default=600}]\n"
-"                [-b Backlight timeout {0..60 secs default=0 (not activated)}]\n"
-"                [-k Keyer {0=Straight,1=Iambic A,2=Iambic B default=0}]\n",PROGRAMID,PROG_VERSION,PROG_BUILD);
+"Usage:\npicoFMi [-f frequency {Hz}]\n"
+"                [-v Verbose {0..2} default=0}]\n",PROGRAMID,PROG_VERSION,PROG_BUILD);
 
 }
 
@@ -259,11 +246,18 @@ int main(int argc, char* argv[])
         }
      }
 
+
+//     dra[m].SQL=5;
+//     dra[m].Vol=5;
+//     dra[m].RFW=146.0000;
+//     dra[m].OFS=000.0000;
+//     dra[m].TFW=dra[m].RFW+dra[m].OFS;
+
 //*--------- Process arguments to override persistence
 
 while(true)
         {
-                a = getopt(argc, argv, "f:h?");
+                a = getopt(argc, argv, "v:f:h?");
 
                 if(a == -1) 
                 {
@@ -282,6 +276,10 @@ while(true)
 	                f=atof(optarg);
                         fprintf(stderr,"%s:main() args(f)=%5.0f\n",PROGRAMID,f);
                         break;
+                case 'v':
+                        TRACE=atoi(optarg);
+                        fprintf(stderr,"%s:main() args(TRACE)=%d\n",PROGRAMID,TRACE);
+                        break;
                 case '?':
                         print_usage();
                         exit(1);
@@ -294,8 +292,6 @@ while(true)
         }
 
 
-
-//*---
 
 
 //*--- Create memory resources
@@ -323,20 +319,9 @@ while(true)
      setupGPIO();
 
 
-    dra=new DRA818V(NULL);
-    dra->start();
-    dra->setRFW(146.00);
-    dra->setTFW(146.00);
-    dra->setVol(5);
-    dra->setGBW(0);
-    dra->setPEF(false);
-    dra->setHPF(false);
-    dra->setLPF(false);
-    dra->setSQL(5);
+//*---- setup  DRA818V
 
-    dra->sendSetGroup();
-    dra->sendSetVolume();
-    dra->sendSetFilter();
+    setupDRA818V();
 
 char buf [100];
 
@@ -348,62 +333,26 @@ char buf [100];
      while(getWord(MSW,RUN)==true) {
 
 //*--- Read and process events coming from the CAT subsystem
-         
-      //   int n = dra->read_data(buf,100);
-      //   if (n!=0) {
-      //     buf[n]=0x00;
-      //     fprintf(stderr,"Buffer[%s]\n",buf);
-      //   }
-         dra->processCommand();
-         if (getWord(GSW,ECW)==true) {
-            setWord(&GSW,ECW,false);
-            strcpy(LCD_Buffer,"ECW rotary         ");
-            lcd->println(0,0,LCD_Buffer);
-            sprintf(cmd,"AT+DMOSETVOLUME=5");
-            dra->send_data(cmd);
-            fprintf(stderr,"Message DMOSETVOLUME=5 sent\n");
-         }
-         if (getWord(GSW,ECCW)==true) {
-            setWord(&GSW,ECCW,false);
-            strcpy(LCD_Buffer,"ECCW rotary        ");
-            lcd->println(0,0,LCD_Buffer);
-            sprintf(cmd,"AT+DMOSETVOLUME=1");
-            dra->send_data(cmd);
-            fprintf(stderr,"Message DMOSETVOLUME=1 sent\n");
-         }
-         if (getWord(GSW,FSW)==true) {
-            setWord(&GSW,FSW,false);
-            strcpy(LCD_Buffer,"SW PUSH detected   ");
-            lcd->println(0,0,LCD_Buffer);
-         }
-         if (getWord(GSW,FSWL)==true) {
-            setWord(&GSW,FSWL,false);
-            strcpy(LCD_Buffer,"SW PUSH long       ");
-            lcd->println(0,0,LCD_Buffer);
-         }
 
-
-         if (getWord(SSW,FVFO)==true) {
-            setWord(&SSW,FVFO,false);
-            TVFO=2000;
-            lcd->setCursor(col,1);
-            lcd->write(byte(255));         
-            if (col!=0) {
-               strcpy(LCD_Buffer," ");
-               lcd->println(col-1,1,LCD_Buffer);
-            }
-            col++;
-            if (col>15) {col=0;}
-         }
+         d->processCommand();
+         processGUI();
          usleep(100000);
+
      }
- 
 
 //*--- Turn off LCD
 
   lcd->backlight(false);
   lcd->setCursor(0,0);
   lcd->clear();
+
+//*--- Turn off gpio
+
+  gpioTerminate();
+
+//*--- Close serial port
+
+  close(fd);
   exit(0);
 }
 
