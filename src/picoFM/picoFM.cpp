@@ -125,6 +125,7 @@ int value=0;
 int lastEncoded=0;
 int counter=0;
 int clkLastState=0; 
+int pushPTT=0;
 
 //* --- Define minIni related parameters (configuration persistence)
 
@@ -160,17 +161,17 @@ int  TVFO=0;
 // *               Initial setup values                             *
 // *----------------------------------------------------------------*
 byte  m=MFM;
-float f=147000000.0;
+float f=147120000.0;
 float ofs=600000.0;
 int   vol=5;
-int   sql=5;
+int   sql=1;
 char  callsign[16];
 char  grid[16];
 int   backlight=0;
 bool  cooler=false;
-int   rx_ctcss=12;
-int   tx_ctcss=12;
-bool  bPD=false;
+float rx_ctcss=0;
+float tx_ctcss=0;
+bool  bPD=true;
 bool  bHL=false;
 
 byte  col=0;
@@ -308,12 +309,12 @@ while(true)
                         fprintf(stderr,"%s:main() args(power high)=%s\n",PROGRAMID,BOOL2CHAR(bHL));
                         break;
                 case 't':
-                        tx_ctcss=atoi(optarg);
-                        fprintf(stderr,"%s:main() args(Rx CTCSS)=%04d\n",PROGRAMID,tx_ctcss);
+                        tx_ctcss=atof(optarg);
+                        fprintf(stderr,"%s:main() args(Rx CTCSS)=%5.1f\n",PROGRAMID,tx_ctcss);
                         break;
                 case 'r':
-                        tx_ctcss=atoi(optarg);
-                        fprintf(stderr,"%s:main() args(Tx CTCSS)=%04d\n",PROGRAMID,rx_ctcss);
+                        rx_ctcss=atof(optarg);
+                        fprintf(stderr,"%s:main() args(Tx CTCSS)=%5.1f\n",PROGRAMID,rx_ctcss);
                         break;
                 case 'x':
                         TRACE=atoi(optarg);
@@ -353,7 +354,7 @@ while(true)
      TVFO=500;
 
     (TRACE>=0x01 ? fprintf(stderr,"%s:main() VFO sub-system initialized\n",PROGRAMID) : _NOP);
-     vfo=new genVFO(changeFrequency,NULL,NULL,NULL);
+     vfo=new genVFO(changeFrequency,NULL,NULL,changeVfoHandler);
      vfo->TRACE=TRACE;
      vfo->FT817=0x00;
      vfo->MODE=m;

@@ -115,7 +115,7 @@
 #define FSWL      0B00001000
 #define FPTT      0B00010000
 #define FSQ       0B00100000
-#define FGUI      0B01000000
+//#define FPTTHI    0B01000000
 #define FBLINK    0B10000000
 
 

@@ -60,9 +60,10 @@ struct DRA818V_response
 
 };
 
+//*---- Structure for future expansion currently only index=0 is used (memory is implemented in the genVFO object not here, the DRA818 has no memory
+
 struct DRA 
 {
-
         float    TFW;
         float    OFS;
         float    RFW;
@@ -74,19 +75,21 @@ struct DRA
 
 };
 //---------------------------------------------------------------------------------------------------
-// gpio CLASS
+// DRA818V Encapsulate the configuration and operation of the DORJI DA818 chipset
 //---------------------------------------------------------------------------------------------------
 class DRA818V {
 
   public: 
   
-         DRA818V(CALLBACK ptt,CALLBACK pdt,CALLBACK hlt);
+         DRA818V(CALLBACK ptt,CALLBACK pdt,CALLBACK hlt);    //Constructor
 
-// --- public methods
+// --- Callbcks
 
 CALLBACK changePTT=NULL;
 CALLBACK changePD=NULL;
 CALLBACK changeHL=NULL;
+
+// --- Public methods
 
      int start();
     void stop();
@@ -166,7 +169,7 @@ CALLBACK changeHL=NULL;
    void  sendSetFilter();
 
 
-   float CTCSStoTone(byte t);
+   float CTCSStoTone(int t);
    int   TonetoCTCSS(float t);
 
 // -- public attributes
@@ -194,6 +197,8 @@ const char   *PROG_BUILD="00";
 const char   *COPYRIGHT="(c) LU7DID 2019,2020";
 
 
+//*--- Define CTCSS tones (DRA818 requires the index to this table as a configuration item)
+
 float CTCSS[38+1]={0.0,67.0,71.9,74.4,77.0,79.7,82.5,85.4,88.5,91.5,94.8,97.4,100.0,103.5,107.2,110.9,114.8,118.8,123.0,127.3,131.8,136.5,141.3,146.2,151.4,156.7,162.2,167.9,173.8,179.9,186.2,192.8,203.5,210.7,218.1,225.7,233.6,241.8,250.3};
 
 
@@ -204,7 +209,7 @@ private:
 
 #endif
 //---------------------------------------------------------------------------------------------------
-// gpio CLASS Implementation
+// DRA818 CLASS Implementation
 //--------------------------------------------------------------------------------------------------
 DRA818V::DRA818V(CALLBACK ptt,CALLBACK pdt,CALLBACK hlt) {
 
@@ -219,7 +224,7 @@ DRA818V::DRA818V(CALLBACK ptt,CALLBACK pdt,CALLBACK hlt) {
 //---------------------------------------------------------------------------------------------------
 // CTCSStoTone Implementation
 //--------------------------------------------------------------------------------------------------
-float DRA818V::CTCSStoTone(byte t) {
+float DRA818V::CTCSStoTone(int t) {
 
     if (t<0 || t>38) {
       (TRACE>=0x00 ? fprintf(stderr,"%s:CTCSStoTone() Tone(%d) invalid, ignored!\n",PROGRAMID,t) : _NOP);
@@ -236,13 +241,13 @@ float DRA818V::CTCSStoTone(byte t) {
 int DRA818V::TonetoCTCSS(float t) {
 
    if (t==0.0) {
-     (TRACE>=0x02 ? fprintf(stderr,"%s:TonetoCTCSS() Tone(%3.0f) is no tone\n",PROGRAMID,t) : _NOP);
+     (TRACE>=0x02 ? fprintf(stderr,"%s:TonetoCTCSS() Tone(%5.0f) is no tone\n",PROGRAMID,t) : _NOP);
       return 0;
    }
 
    for (int i=0;i<39;i++) {
      if (CTCSS[i]==t) {
-        (TRACE>=0x02 ? fprintf(stderr,"%s:TonetoCTCSS() Tone(%3.0f) found index(%03d)\n",PROGRAMID,t,i) : _NOP);
+        (TRACE>=0x02 ? fprintf(stderr,"%s:TonetoCTCSS() Tone(%5.0f) found index(%03d)\n",PROGRAMID,t,i) : _NOP);
          return i;
      }
    }
@@ -261,7 +266,7 @@ char* val;
     p=(char*)malloc(128);
     sprintf(cmd,"%s",commandQueue);
     strcpy(d[pR].response,cmd);
-
+    (TRACE>=0x03 ? fprintf(stderr,"%s:parseCommand(): Response(%s)\n",PROGRAMID,cmd) : _NOP);
     if (strstr(cmd,"+DMOCONNECT:") != NULL || strstr(cmd,"DMOSETGROUP:") != NULL || strstr(cmd,"DMOSETFILTER:")!=NULL || strstr(cmd,"DMOSETVOLUME:")!=NULL) {
        token = strtok(cmd, ":");
        strcpy(p,token);
@@ -287,24 +292,32 @@ void DRA818V::processCommand() {
 char buffer[128];
 char* c;
 
+
+    (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() DRA818 Message status(%s)\n",PROGRAMID,BOOL2CHAR(d[pR].active)) : _NOP);
+
      if (d[pR].active==true) {
          d[pR].active=false;
+        (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() DRA818 Sending command(%s)\n",PROGRAMID,d[pR].command) : _NOP);
+
          strcpy(buffer,d[pR].command);
          strcat(buffer,"\r\n");
          write(fd,buffer,strlen(buffer)); 
          (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() Write Command[%s]\n",PROGRAMID,d[pR].command) : _NOP);
+         usleep(100000);
      }
 
 c=(char*)malloc(16);
+
 int  n=read(fd,buffer,128);
      if(n==0) return;
+     (TRACE>=0x03 ? fprintf(stderr,"processCommand() read (%d) characters from serial in\n",n) : _NOP);
      for (int i=0;i<n;i++) {
          c[0]=buffer[i];
          c[1]=0x00;
          if (strcmp(c,"\r")!=0 && strcmp(c,"\n")!=0) {
-
              commandQueue[pWrite]=buffer[i];
              pWrite++;         
+             commandQueue[pWrite]=0x00;
          } else {
              if (strcmp(c,"\n")==0) {
                 commandQueue[pWrite]=0x00;
@@ -331,7 +344,7 @@ int  n=read(fd,buffer,128);
      }
 }
 //---------------------------------------------------------------------------------------------------
-// send operations (fork processes) Implementation
+// send data, actually queue but not send a command
 //--------------------------------------------------------------------------------------------------
 void DRA818V::send_data(char* s) {
 
@@ -346,7 +359,7 @@ void DRA818V::send_data(char* s) {
 
 }
 //---------------------------------------------------------------------------------------------------
-// read operations (fork processes) Implementation
+// read operations read data (not used beyond debugging)
 //--------------------------------------------------------------------------------------------------
 int DRA818V::read_data(char* buffer,int len) {
 int n = read (fd, buffer, len);
@@ -357,7 +370,7 @@ int n = read (fd, buffer, len);
     return 0;
 }
 //---------------------------------------------------------------------------------------------------
-// start operations (fork processes) Implementation
+// start operations
 //--------------------------------------------------------------------------------------------------
 int DRA818V::start() {
 
@@ -378,7 +391,7 @@ int DRA818V::start() {
     return 0;
 }
 //---------------------------------------------------------------------------------------------------
-// stop()  CLASS Implementation
+// stop()  Stop operations
 //--------------------------------------------------------------------------------------------------
 void DRA818V::stop() {
 
@@ -449,32 +462,41 @@ void DRA818V::set_blocking (int fd, int should_block)
                    (TRACE>=0x00 ? fprintf(stderr,"error %d setting term attributes", errno) : _NOP);
 }
 //--------------------------------------------------------------------------------------------------
+// This method sends the DMOSETGROUP command
+//--------------------------------------------------------------------------------------------------
 void DRA818V::sendSetGroup() {
 
      sprintf(command,"AT+DMOSETGROUP=%d,%3.4f,%3.4f,%04d,%d,%04d",getWord(dra[m].STATUS,GBW),dra[m].TFW,dra[m].RFW,dra[m].Rx_CTCSS,dra[m].SQL,dra[m].Tx_CTCSS);
      this->send_data(command);
+     //usleep(100000);
 
 }
+//--------------------------------------------------------------------------------------------------
+// This method sends the DMOSETVOLUME command
 //--------------------------------------------------------------------------------------------------
 void DRA818V::sendSetVolume() {
 
      sprintf(command,"AT+DMOSETVOLUME=%d",dra[m].Vol);
      this->send_data(command);
-
+     //usleep(100000);
 }
+//--------------------------------------------------------------------------------------------------
+// This method sends the SETFILTER (why not DMOSETFILTER?) command
 //--------------------------------------------------------------------------------------------------
 void DRA818V::sendSetFilter() {
 
      sprintf(command,"AT+SETFILTER=%d,%d,%d",getWord(dra[m].STATUS,PEF),getWord(dra[m].STATUS,HPF),getWord(dra[m].STATUS,LPF));
      this->send_data(command);
-
+     //usleep(100000);
 }
+//--------------------------------------------------------------------------------------------------
+// getter and setters for the different parameters (some validation performed)
 //--------------------------------------------------------------------------------------------------
 float DRA818V::getRFW(byte m) {
 
     if (m<0 || m>15) return 0.0;
 
-   (TRACE>=0x00 ? fprintf(stderr,"%s::getRFW() RFW(%5.1f)\n",PROGRAMID,dra[m].RFW) : _NOP);
+   (TRACE>=0x00 ? fprintf(stderr,"%s::getRFW() RFW(%6.2f)\n",PROGRAMID,dra[m].RFW) : _NOP);
     return dra[m].RFW;
 }
 //--------------------------------------------------------------------------------------------------
@@ -487,7 +509,7 @@ void DRA818V::setRFW(byte m,float f) {
     if (m<0 || m>15) return;
 
     dra[m].RFW=f;
-   (TRACE>=0x00 ? fprintf(stderr,"%s::setRFW() TFW(%5.1f)\n",PROGRAMID,dra[m].RFW) : _NOP);
+   (TRACE>=0x00 ? fprintf(stderr,"%s::setRFW() TFW(%6.2f)\n",PROGRAMID,dra[m].RFW) : _NOP);
     return;
 }
 //--------------------------------------------------------------------------------------------------
@@ -499,7 +521,7 @@ void DRA818V::setRFW(float f) {
 float DRA818V::getTFW(byte m) {
     if (m<0 || m>15) return 0.0;
 
-   (TRACE>=0x00 ? fprintf(stderr,"%s::getTFW() TFW(%5.1f)\n",PROGRAMID,dra[m].TFW) : _NOP);
+   (TRACE>=0x00 ? fprintf(stderr,"%s::getTFW() TFW(%6.2f)\n",PROGRAMID,dra[m].TFW) : _NOP);
     return dra[m].TFW;
 }
 //--------------------------------------------------------------------------------------------------
@@ -515,7 +537,7 @@ void DRA818V::setTFW(float f) {
 void DRA818V::setTFW(byte m,float f) {
     if (m<0 || m>15) return;
     dra[m].TFW=f;
-   (TRACE>=0x00 ? fprintf(stderr,"%s::setTFW() TFW(%5.1f)\n",PROGRAMID,dra[m].TFW) : _NOP);
+   (TRACE>=0x00 ? fprintf(stderr,"%s::setTFW() TFW(%6.2f)\n",PROGRAMID,dra[m].TFW) : _NOP);
     return;
 }
 //--------------------------------------------------------------------------------------------------
@@ -532,6 +554,7 @@ void DRA818V::setTxCTCSS(byte m,int t) {
    dra[m].Tx_CTCSS=t;
    return;   
 }
+//--------------------------------------------------------------------------------------------------
 void DRA818V::setTxCTCSS(int t) {
    this->setTxCTCSS(0,t);
    return;
@@ -560,6 +583,7 @@ void DRA818V::setRxCTCSS(byte m,int t){
 }
 //--------------------------------------------------------------------------------------------------
 void DRA818V::setRxCTCSS(int t) {
+   (TRACE>=0x00 ? fprintf(stderr,"%s::setRxCTCSS() node(%d) CTCSS(%d)\n",PROGRAMID,this->m,t) : _NOP);
    return setRxCTCSS(this->m,t);
 }
 //--------------------------------------------------------------------------------------------------
@@ -729,3 +753,6 @@ void DRA818V::setPTT(bool v) {
     if (changePTT!=NULL) {changePTT();}
     return;
 }
+//*--------------------------------------------------------------------------------------------------*
+//*                                   End of Code                                                    *
+//*--------------------------------------------------------------------------------------------------*

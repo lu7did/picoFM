@@ -1,3 +1,6 @@
+//--------------------------------------------------------------------------------------------------
+// Turn backlight on/off
+//--------------------------------------------------------------------------------------------------
 void setBacklight(bool v) {
     if (lcd==nullptr) return;
     lcd->backlight(v);
@@ -122,7 +125,7 @@ void updateSW(int gpio, int level, uint32_t tick)
      int pushSW=gpioRead(GPIO_SW);
 }
 //*--------------------------[Rotary Encoder Interrupt Handler]--------------------------------------
-//* Interrupt handler routine for Rotary Encoder Push button
+//* Interrupt handler routine for Squelch
 //*--------------------------------------------------------------------------------------------------
 void updateSQL(int gpio, int level, uint32_t tick)
 {
@@ -144,9 +147,10 @@ void updateSQL(int gpio, int level, uint32_t tick)
      }
      startSQL = std::chrono::system_clock::now();
      int pushSQL=gpioRead(GPIO_SQL);
+
 }
 //*--------------------------[Rotary Encoder Interrupt Handler]--------------------------------------
-//* Interrupt handler routine for Rotary Encoder Push button
+//* Interrupt handler routine for Microphone PTT Push button
 //*--------------------------------------------------------------------------------------------------
 void updateMICPTT(int gpio, int level, uint32_t tick)
 {
@@ -154,21 +158,18 @@ void updateMICPTT(int gpio, int level, uint32_t tick)
      setBacklight(true);
      if (level != 0) {
         endPTT = std::chrono::system_clock::now();
-        int lapPTT=std::chrono::duration_cast<std::chrono::milliseconds>(endPTT - startPTT).count();
-        if (getWord(GSW,FPTT)==true) {
-           (TRACE>=0x02 ? fprintf(stderr,"%s:updateMICPTT() Last signal pending processsing, ignored!\n",PROGRAMID) : _NOP);
-           return;
-        }
-        if (lapPTT < MINSWPUSH) {
-           (TRACE>=0x02 ? fprintf(stderr,"%s:updateMICPTT() PTT pulsetoo short! ignored!\n",PROGRAMID) : _NOP) ;
-           return;
-        } else {
-          setWord(&GSW,FPTT,true);
-        }
+    int lapPTT=std::chrono::duration_cast<std::chrono::milliseconds>(endPTT - startPTT).count();
+        pushPTT=1;
+       (TRACE>=0x03 ? fprintf(stderr,"%s:updateMICPTT() GPIO level up pushPTT(%d)\n",PROGRAMID,pushPTT) : _NOP);
+        setWord(&GSW,FPTT,true);
         return;
      }
      startPTT = std::chrono::system_clock::now();
-     int pushPTT=gpioRead(GPIO_MICPTT);
+     pushPTT=gpioRead(GPIO_MICPTT);
+     pushPTT=0;
+     setWord(&GSW,FPTT,true);
+    (TRACE>=0x03 ? fprintf(stderr,"%s:updateMICPTT() GPIO level down pushPTT(%d)\n",PROGRAMID,pushPTT) : _NOP);
+
 }
 //*--------------------------------------------------------------------------------------------------
 //* setupGPIO setup the GPIO definitions
@@ -206,7 +207,7 @@ void setupGPIO() {
     gpioSetMode(GPIO_MICPTT, PI_INPUT);
     gpioSetPullUpDown(GPIO_MICPTT,PI_PUD_UP);
     usleep(100000);
-    gpioSetISRFunc(GPIO_MICPTT, FALLING_EDGE,0,updateMICPTT);
+    gpioSetISRFunc(GPIO_MICPTT, EITHER_EDGE,0,updateMICPTT);
 
     (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() SQL\n",PROGRAMID) : _NOP);
 
@@ -220,18 +221,21 @@ void setupGPIO() {
     gpioSetMode(GPIO_PTT, PI_OUTPUT);
     gpioSetPullUpDown(GPIO_PTT,PI_PUD_UP);
     usleep(100000);
+    gpioWrite(GPIO_PTT,1);
 
     (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() PD\n",PROGRAMID) : _NOP);
 
     gpioSetMode(GPIO_PD, PI_OUTPUT);
     gpioSetPullUpDown(GPIO_PD,PI_PUD_UP);
     usleep(100000);
+    gpioWrite(GPIO_PD,1);
 
     (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() HL\n",PROGRAMID) : _NOP);
 
     gpioSetMode(GPIO_HL, PI_OUTPUT);
     gpioSetPullUpDown(GPIO_PD,PI_PUD_UP);
     usleep(100000);
+    gpioWrite(GPIO_HL,0);
 
     (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() Setup GPIO signal Handler\n",PROGRAMID) : _NOP);
     for (int i=0;i<64;i++) {
@@ -243,6 +247,24 @@ void setupGPIO() {
 
 
 }
+void DRAchangePTT() {
+
+    (TRACE>=0x02 ? fprintf(stderr,"%s:DRAchangePTT() Process PTT change request PTT(%s)\n",PROGRAMID,BOOL2CHAR(d->getPTT())) : _NOP);
+    (d->getPTT()==false ? gpioWrite(GPIO_PTT,1) : gpioWrite(GPIO_PTT,0));
+
+}
+void DRAchangeHL() {
+
+    (TRACE>=0x02 ? fprintf(stderr,"%s:DRAchangeHL() Process HL change request HL(%s)\n",PROGRAMID,BOOL2CHAR(d->getHL())) : _NOP);
+    (d->getHL()==false ? gpioWrite(GPIO_HL,0) : gpioWrite(GPIO_HL,1));
+
+}
+void DRAchangePD() {
+
+    (TRACE>=0x02 ? fprintf(stderr,"%s:DRAchangeHL() Process PD change request HL(%s)\n",PROGRAMID,BOOL2CHAR(d->getPD())) : _NOP);
+    (d->getPD()==false ? gpioWrite(GPIO_PD,0) : gpioWrite(GPIO_PD,1));
+
+}
 //*--------------------------------------------------------------------------------------------------
 //* setupDRA818V setup the DRA818V definitions
 //*--------------------------------------------------------------------------------------------------
@@ -250,7 +272,7 @@ void setupDRA818V() {
 
 //*---- setup  DRA818V
 
-    d=new DRA818V(NULL,NULL,NULL);
+    d=new DRA818V(DRAchangePTT,DRAchangePD,DRAchangeHL);
     d->start();
 
     d->setRFW(f/1000000.0);
@@ -276,7 +298,7 @@ void setupDRA818V() {
     return;
 }
 //*==================================================================================================
-//
+// Define handlers for the different segments of the LCD display
 //*==================================================================================================
 void showMenu() {
     lcd->clear();
@@ -336,20 +358,37 @@ int alt=0;
 
 }
 //*----------------------
+//*==================================================================================================
 void showFrequency() {
 
      if (vfo==nullptr) {return;}
 
-     //strcpy(LCD_Buffer," ");
-     //lcd->println(9,0,LCD_Buffer);
-     //lcd->println(9,1,LCD_Buffer);
+     if (vfo->getPTT() == false) {
+        sprintf(LCD_Buffer,"%6.2f",vfo->get(VFOA)/1000000.0);
+        lcd->println(2,0,LCD_Buffer);
 
-     sprintf(LCD_Buffer,"%6.2f",vfo->get(VFOA)/1000000.0);
-     lcd->println(2,0,LCD_Buffer);
+        sprintf(LCD_Buffer,"%6.2f",vfo->get(VFOB)/1000000.0);
+        lcd->println(2,1,LCD_Buffer);
+        return;
 
-     sprintf(LCD_Buffer,"%6.2f",vfo->get(VFOB)/1000000.0);
-     lcd->println(2,1,LCD_Buffer);
+     }
 
+     if (vfo->vfo==VFOA) {
+        sprintf(LCD_Buffer,"%6.2f",(vfo->get(VFOA)+vfo->getShift(VFOA))/1000000.0);
+        lcd->println(2,0,LCD_Buffer);
+
+        sprintf(LCD_Buffer,"%6.2f",vfo->get(VFOB)/1000000.0);
+        lcd->println(2,1,LCD_Buffer);
+
+     } else {
+
+        sprintf(LCD_Buffer,"%6.2f",vfo->get(VFOA)/1000000.0);
+        lcd->println(2,0,LCD_Buffer);
+
+        sprintf(LCD_Buffer,"%6.2f",(vfo->get(VFOB)+vfo->getShift(VFOB))/1000000.0);
+        lcd->println(2,1,LCD_Buffer);
+
+     }
 }
 
 //*==================================================================================================
@@ -364,6 +403,7 @@ void showDRA818V() {
        lcd->println(8,0,LCD_Buffer);
      }
 }
+//*==================================================================================================
 
 void showPTT() {
 
@@ -376,6 +416,7 @@ void showPTT() {
    lcd->setCursor(9,0);
    lcd->write(0);
 }
+//*==================================================================================================
 
 void showMeter() {
 
@@ -415,6 +456,7 @@ int  n=0;
      }
 
 }
+//*==================================================================================================
 
 void showShift() {
 
@@ -432,6 +474,7 @@ void showShift() {
     lcd->println(10,0,LCD_Buffer);
 
 }
+//*==================================================================================================
 
 void showCTCSS() {
 
@@ -444,6 +487,7 @@ void showCTCSS() {
     }
     lcd->println(10,0,LCD_Buffer);
 }
+//*==================================================================================================
 void showHL() {
     if (d==nullptr) {return;}
 
@@ -455,6 +499,7 @@ void showHL() {
     lcd->println(12,0,LCD_Buffer);
 
 }
+//*==================================================================================================
 void showPD() {
     if (d==nullptr) {return;}
 
@@ -466,6 +511,7 @@ void showPD() {
     lcd->println(13,0,LCD_Buffer);
 
 }
+//*==================================================================================================
 void showVFOMEM() {
 
 //*--- Mockup
@@ -474,6 +520,9 @@ void showVFOMEM() {
     lcd->println(10,1,LCD_Buffer);
 
 }
+//*==================================================================================================
+//* Show the entire VFO panel at once
+//*==================================================================================================
 
 void showPanel() {
     if (lcd==nullptr) {return;}
@@ -495,7 +544,7 @@ void showPanel() {
 }
 
 //*--------------------------------------------------------------------------------------------------
-//* Handlers for VFO events
+//* Handlers for DRA818 Frequency events
 //*--------------------------------------------------------------------------------------------------
 void changeFrequency(float f) {
 
@@ -504,12 +553,66 @@ void changeFrequency(float f) {
     TVFO=3000;
     setWord(&GSW,FBLINK,true);
 
+    if (d==nullptr) {return;}
+    d->setRFW(vfo->get()/1000000.0);
+    d->setTFW(d->getRFW()+(vfo->getShift()/1000000));
+    d->sendSetGroup();
+
 }
+//*=====================================================================================================================
+//* hook to manage changes in status (SPLIT, RIT, PTT, etc)
+//*=====================================================================================================================
+void changeVfoHandler(byte S) {
+
+   if (getWord(S,SPLIT)==true) {
+      if(vfo==nullptr) {return;}
+      (TRACE>=0x02 ? fprintf(stderr,"%s:changeVfoHandler() change SPLIT S(%s) On\n",PROGRAMID,BOOL2CHAR(getWord(vfo->FT817,SPLIT))) : _NOP);
+   }
+   if (getWord(S,RITX)==true) {
+
+   }
+   if (getWord(S,PTT)==true) {
+      if (vfo==nullptr) {return;}
+      if (d==nullptr) {return;}
+
+      (TRACE>=0x02 ? fprintf(stderr,"%s:changeVfoHandler() change PTT S(%s) On\n",PROGRAMID,BOOL2CHAR(getWord(vfo->FT817,PTT))) : _NOP);
+      d->setPTT(getWord(vfo->FT817,PTT));
+      showPTT();
+      showFrequency();
+
+   }
+   if (getWord(S,VFO)==true) {
+      if (vfo==nullptr) {return;}
+      (TRACE>=0x02 ? fprintf(stderr,"%s:changeVfoHandler() change VFO S(%s) On\n",PROGRAMID,BOOL2CHAR(getWord(vfo->FT817,VFO))) : _NOP);
+      showVFO();
+      showChange();
+   }
+
+}
+//*=====================================================================================================================
+//* hook to manage changes in frequency
+//*=====================================================================================================================
+void freqVfoHandler(float f) {  // handler to receiver VFO upcalls for frequency changes
+
+char* b;
+
+   if (vfo==nullptr) {return;}
+
+   b=(char*)malloc(128);
+   vfo->vfo2str(vfo->vfo,b);
+   showFrequency();
+   showChange();
+   //if (cat!=nullptr) {
+   //   cat->f=vfo->get(vfo->vfo);
+   //}
+   (TRACE>=0x02 ? fprintf(stderr,"%s:freqVfoHandler() VFO(%s) f(%5.0f) fA(%5.0f) fB(%5.0f) PTT(%s)\n",PROGRAMID,b,f,vfo->get(VFOA),vfo->get(VFOB),BOOL2CHAR(getWord(vfo->FT817,PTT))) : _NOP);
+
+}
+
 //*--------------------------------------------------------------------------------------------------
-//* processGUI()
+//* processGUI() handles the update of the main panel, the menu panel or the item panel
 //*--------------------------------------------------------------------------------------------------
 void processGUI() {
-
 
 //*-------------- Process main display Panel (CMD=false GUI=*)
 
@@ -552,12 +655,14 @@ void processGUI() {
 
         }
 
+        if (getWord(GSW,FPTT)==true) {
+            setWord(&GSW,FPTT,false);
+           (pushPTT==0x00 ? vfo->setPTT(true) : vfo->setPTT(false));
+        }
      }
-
 //*====================================================================================================
-
-
 //*-------------- Process main menu Panel (CMD=true GUI=false)
+//*====================================================================================================
 
     if (getWord(MSW,CMD)==true && getWord(MSW,GUI)==false) {
 
