@@ -203,6 +203,11 @@ void setWord(unsigned char* SysWord,unsigned char v, bool val) {
 static void sighandler(int signum)
 {
 
+   if (signum==28) {
+      (TRACE >= 0x00 ? fprintf(stderr, "\n%s:sighandler() SIG(%d), ignored!\n",PROGRAMID,signum) : _NOP);
+      return;
+   }
+
    (TRACE >= 0x00 ? fprintf(stderr, "\n%s:sighandler() Signal caught(%d), exiting!\n",PROGRAMID,signum) : _NOP);
    setWord(&MSW,RUN,false);
    if (getWord(MSW,RETRY)==true) {
@@ -254,7 +259,7 @@ int main(int argc, char* argv[])
      fprintf(stderr,"%s Version %s Build(%s) %s\n",PROGRAMID,PROG_VERSION,PROG_BUILD,COPYRIGHT);
 
      for (int i = 0; i < 64; i++) {
-        if (i != SIGALRM && i != 17 && i != 28) {
+        if (i != SIGALRM && i != 17) {
            signal(i,sighandler);
         }
      }
@@ -348,7 +353,7 @@ while(true)
      TVFO=500;
 
     (TRACE>=0x01 ? fprintf(stderr,"%s:main() VFO sub-system initialized\n",PROGRAMID) : _NOP);
-     vfo=new genVFO(NULL,NULL,NULL,NULL);
+     vfo=new genVFO(changeFrequency,NULL,NULL,NULL);
      vfo->TRACE=TRACE;
      vfo->FT817=0x00;
      vfo->MODE=m;
@@ -377,7 +382,8 @@ while(true)
     (TRACE>=0x01 ? fprintf(stderr,"%s:main() Setup DRA818V chipset sub-system\n",PROGRAMID) : _NOP);
     setupDRA818V();
 
-
+    (TRACE>=0x01 ? fprintf(stderr,"%s:main() Display main panel\n",PROGRAMID) : _NOP);
+    showPanel();
 
 char buf [100];
 

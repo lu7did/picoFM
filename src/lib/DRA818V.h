@@ -45,7 +45,7 @@ void setWord(unsigned char* SysWord,unsigned char v, bool val);
 #define  LPF     0B00001000
 #define  HL      0B00010000
 #define  PD      0B00100000
-#define  READY   0B01000000
+#define  SQ      0B01000000
 #define  PT      0B10000000
 
 
@@ -319,7 +319,7 @@ int  n=read(fd,buffer,128);
                   (TRACE>=0x02 ? fprintf(stderr,"%s:processCommand() Command(%s) Response(%s) serviced rc(%s)\n",PROGRAMID,d[pR].command,d[pR].response,d[pR].rc) : _NOP);
                   if (strcmp(d[pR].command,"AT+DMOCONNECT")==0 && strcmp(d[pR].response,"+DMOCONNECT:0")==0) {
                      (TRACE>=0x02 ? fprintf(stderr,"%s:processCommand() Response to DMOCONNECT command recognized, receiver online\n",PROGRAMID) : _NOP);
-                     setWord(&dra[m].STATUS,READY,true);
+                     setWord(&MSW,RUN,true);
                   }
                   pR++;
                   if (pR>15) {
