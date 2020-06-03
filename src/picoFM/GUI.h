@@ -133,20 +133,16 @@ void updateSQL(int gpio, int level, uint32_t tick)
      if (level != 0) {
         endSQL = std::chrono::system_clock::now();
         int lapSQL=std::chrono::duration_cast<std::chrono::milliseconds>(endSQL - startSQL).count();
-        if (getWord(GSW,FSQ)==true) {
-           (TRACE>=0x02 ? fprintf(stderr,"%s:updateSQL() Last SQL signal pending processsing, ignored!\n",PROGRAMID) : _NOP);
-           return;
-        }
-        if (lapSQL < MINSWPUSH) {
-           (TRACE>=0x02 ? fprintf(stderr,"%s:updateSQL() SQL pulsetoo short! ignored!\n",PROGRAMID) : _NOP) ;
-           return;
-        } else {
-           setWord(&GSW,FSQ,true);
-        }
+        pushSQL=1;
+        if (d!=nullptr) {setWord(&d->dra[m].STATUS,SQ,false);}
+        setWord(&GSW,FSQ,true);
         return;
      }
+
      startSQL = std::chrono::system_clock::now();
-     int pushSQL=gpioRead(GPIO_SQL);
+     pushSQL=0;
+     if (d!=nullptr) {setWord(&d->dra[m].STATUS,SQ,true);}
+     setWord(&GSW,FSQ,true);
 
 }
 //*--------------------------[Rotary Encoder Interrupt Handler]--------------------------------------
@@ -214,7 +210,7 @@ void setupGPIO() {
     gpioSetMode(GPIO_SQL, PI_INPUT);
     gpioSetPullUpDown(GPIO_SQL,PI_PUD_UP);
     usleep(100000);
-    gpioSetISRFunc(GPIO_SQL, FALLING_EDGE,0,updateSQL);
+    gpioSetISRFunc(GPIO_SQL, EITHER_EDGE,0,updateSQL);
 
     (TRACE>=0x02 ? fprintf(stderr,"%s:setupGPIO() PTT\n",PROGRAMID) : _NOP);
 
@@ -422,7 +418,7 @@ void showMeter() {
 
      if (getWord(MSW,CMD)==true) {return;}
 
-     lcd->setCursor(13,1);   //Placeholder Meter till a routine is developed for it
+     //lcd->setCursor(13,1);   //Placeholder Meter till a routine is developed for it
 
      if (vfo==nullptr) {
         (TRACE>=0x02 ? fprintf(stderr,"%s:showMeter() vfo pointer is NULL, request ignored\n",PROGRAMID) : _NOP);
@@ -432,29 +428,22 @@ void showMeter() {
      if (d==nullptr) {return;}
      
 int  n=0;
-     (getWord(d->dra[d->m].STATUS,SQ)==true ? n=10 : n=0);
-     (TRACE>=0x02 ? fprintf(stderr,"%s:showMeter() segments(%d)\n",PROGRAMID,n) : _NOP);
-
+     (getWord(d->dra[m].STATUS,SQ)==true ? n=1 : n=0);
+     (TRACE>=0x03 ? fprintf(stderr,"%s:showMeter() segments(%d)\n",PROGRAMID,n) : _NOP);
      switch(n) {
-
-      case 0 : {lcd->write(byte(32))    ;lcd->write(byte(32))  ;lcd->write(byte(32));break;}
-      case 1 : {lcd->write(byte(1))    ;lcd->write(byte(32))  ;lcd->write(byte(32));break;}
-      case 2 : {lcd->write(byte(2))    ;lcd->write(byte(32))  ;lcd->write(byte(32));break;}
-      case 3 : {lcd->write(byte(3))    ;lcd->write(byte(32))  ;lcd->write(byte(32));break;}
-      case 4 : {lcd->write(byte(4))    ;lcd->write(byte(32))  ;lcd->write(byte(32));break;}
-      case 5 : {lcd->write(byte(255))  ;lcd->write(byte(32))  ;lcd->write(byte(32));break;}
-      case 6 : {lcd->write(byte(255))  ;lcd->write(byte(1))   ;lcd->write(byte(32));break;}
-      case 7 : {lcd->write(byte(255))  ;lcd->write(byte(2))   ;lcd->write(byte(32));break;}
-      case 8 : {lcd->write(byte(255))  ;lcd->write(byte(3))   ;lcd->write(byte(32));break;}
-      case 9 : {lcd->write(byte(255))  ;lcd->write(byte(4))   ;lcd->write(byte(32));break;}
-      case 10 : {lcd->write(byte(255))  ;lcd->write(byte(255)) ;lcd->write(byte(32));break;}
-      case 11: {lcd->write(byte(255))  ;lcd->write(byte(255)) ;lcd->write(byte(1));break;}
-      case 12: {lcd->write(byte(255))  ;lcd->write(byte(255)) ;lcd->write(byte(2));break;}
-      case 13: {lcd->write(byte(255))  ;lcd->write(byte(255)) ;lcd->write(byte(3));break;}
-      case 14: {lcd->write(byte(255))  ;lcd->write(byte(255)) ;lcd->write(byte(4));break;}
-      case 15: {lcd->write(byte(255))  ;lcd->write(byte(255)) ;lcd->write(byte(255));break;}
+        case 0 : {
+                  strcpy(LCD_Buffer," ");
+                  lcd->println(14,1,LCD_Buffer);
+                  break;
+                 }
+        case 1 : {
+                  lcd->setCursor(14,1);
+                  lcd->write(byte(255));
+                  break;
+                 }
      }
-
+     usleep(10000);
+     return;
 }
 //*==================================================================================================
 
@@ -645,14 +634,18 @@ void processGUI() {
            showChange();
         }
 
-
         if (getWord(GSW,FSW)==true) {   // switch to menu mode
            setWord(&GSW,FSW,false);
            setWord(&MSW,CMD,true);
            setWord(&MSW,GUI,false);
            //lcd->clear();
            showMenu();
+        }
 
+        if (getWord(GSW,FSQ)==true) {
+            setWord(&GSW,FSQ,false);
+           (TRACE>=0x02 ? fprintf(stderr,"%s:processGUI() SQL activation SQL(%s)\n",PROGRAMID,BOOL2CHAR(getWord(d->dra[m].STATUS,SQ))) : _NOP);
+            showMeter();
         }
 
         if (getWord(GSW,FPTT)==true) {

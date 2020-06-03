@@ -87,7 +87,6 @@ const char   *PROG_VERSION="1.0";
 const char   *PROG_BUILD="00";
 const char   *COPYRIGHT="(c) LU7DID 2018,2020";
 
-
 int       a;
 int       anyargs;
 int       lcd_light;
@@ -109,12 +108,6 @@ auto endEncoder=std::chrono::system_clock::now();
 auto startPush=std::chrono::system_clock::now();
 auto endPush=std::chrono::system_clock::now();
 
-//auto startAux=std::chrono::system_clock::now();
-//auto endAux=std::chrono::system_clock::now();
-
-//auto startLeft=std::chrono::system_clock::now();
-//auto endLeft=std::chrono::system_clock::now();
-
 auto startPTT=std::chrono::system_clock::now();
 auto endPTT=std::chrono::system_clock::now();
 
@@ -126,7 +119,7 @@ int lastEncoded=0;
 int counter=0;
 int clkLastState=0; 
 int pushPTT=0;
-
+int pushSQL=0;
 //* --- Define minIni related parameters (configuration persistence)
 
 char inifile[80];
@@ -154,7 +147,6 @@ MMS* paddir;
 
 int  TBCK=0;
 int  TSAVE=0;
-
 int  TVFO=0;
 
 // *----------------------------------------------------------------*

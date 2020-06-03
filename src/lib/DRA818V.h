@@ -267,7 +267,7 @@ char* val;
     sprintf(cmd,"%s",commandQueue);
     strcpy(d[pR].response,cmd);
     (TRACE>=0x03 ? fprintf(stderr,"%s:parseCommand(): Response(%s)\n",PROGRAMID,cmd) : _NOP);
-    if (strstr(cmd,"+DMOCONNECT:") != NULL || strstr(cmd,"DMOSETGROUP:") != NULL || strstr(cmd,"DMOSETFILTER:")!=NULL || strstr(cmd,"DMOSETVOLUME:")!=NULL) {
+    if (strstr(cmd,"+DMOCONNECT:") != NULL || strstr(cmd,"DMOSETGROUP:") != NULL || strstr(cmd,"DMOSETFILTER:")!=NULL || strstr(cmd,"DMOSETVOLUME:") != NULL || strstr(cmd,"+VERSION")!=NULL) {
        token = strtok(cmd, ":");
        strcpy(p,token);
        while (token!=NULL) {
@@ -385,6 +385,10 @@ int DRA818V::start() {
      set_blocking (fd, 0);                // set no blocking
      strcpy(command,"AT+DMOCONNECT");
      this->send_data(command);
+
+     strcpy(command,"AT+VERSION");
+     this->send_data(command);
+
      setWord(&MSW,RUN,true);
     (TRACE>=0x00 ? fprintf(stderr,"%s::start() serial interface(%s) active\n",PROGRAMID,portname) : _NOP);
 
