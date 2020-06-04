@@ -20,6 +20,7 @@
 #include<stdio.h>
 #include<fcntl.h> 
 #include <termios.h>
+#include "/home/pi/OrangeThunder/src/lib/CallBackTimer.h"
 #include "../picoFM/picoFM.h"
 #include <iostream>
 #include <fstream>
@@ -34,6 +35,7 @@ using namespace std;
 typedef unsigned char byte;
 typedef bool boolean;
 typedef void (*CALLBACK)();
+typedef void (*CALLRSSI)(float s);
 
 bool getWord (unsigned char SysWord, unsigned char v);
 void setWord(unsigned char* SysWord,unsigned char v, bool val);
@@ -74,6 +76,8 @@ struct DRA
         byte     Vol;
 
 };
+
+
 //---------------------------------------------------------------------------------------------------
 // DRA818V Encapsulate the configuration and operation of the DORJI DA818 chipset
 //---------------------------------------------------------------------------------------------------
@@ -81,13 +85,14 @@ class DRA818V {
 
   public: 
   
-         DRA818V(CALLBACK ptt,CALLBACK pdt,CALLBACK hlt);    //Constructor
+         DRA818V(CALLBACK ptt,CALLBACK pdt,CALLBACK hlt,CALLRSSI s);    //Constructor
 
 // --- Callbcks
 
 CALLBACK changePTT=NULL;
 CALLBACK changePD=NULL;
 CALLBACK changeHL=NULL;
+CALLRSSI changeRSSI=NULL;
 
 // --- Public methods
 
@@ -167,7 +172,7 @@ CALLBACK changeHL=NULL;
    void  sendSetGroup();
    void  sendSetVolume();
    void  sendSetFilter();
-
+   void  sendRSSI();
 
    float CTCSStoTone(int t);
    int   TonetoCTCSS(float t);
@@ -211,11 +216,12 @@ private:
 //---------------------------------------------------------------------------------------------------
 // DRA818 CLASS Implementation
 //--------------------------------------------------------------------------------------------------
-DRA818V::DRA818V(CALLBACK ptt,CALLBACK pdt,CALLBACK hlt) {
+DRA818V::DRA818V(CALLBACK ptt,CALLBACK pdt,CALLBACK hlt,CALLRSSI s) {
 
    if (ptt!=NULL) {changePTT=ptt;}
    if (pdt!=NULL) {changePD=pdt;}
    if (hlt!=NULL) {changeHL=hlt;}
+   if (s!=NULL) {changeRSSI=s;}
 
 // --- initial definitions
 
@@ -267,7 +273,7 @@ char* val;
     sprintf(cmd,"%s",commandQueue);
     strcpy(d[pR].response,cmd);
     (TRACE>=0x03 ? fprintf(stderr,"%s:parseCommand(): Response(%s)\n",PROGRAMID,cmd) : _NOP);
-    if (strstr(cmd,"+DMOCONNECT:") != NULL || strstr(cmd,"DMOSETGROUP:") != NULL || strstr(cmd,"DMOSETFILTER:")!=NULL || strstr(cmd,"DMOSETVOLUME:") != NULL || strstr(cmd,"+VERSION")!=NULL) {
+    if (strstr(cmd,"+DMOCONNECT:") != NULL || strstr(cmd,"DMOSETGROUP:") != NULL || strstr(cmd,"DMOSETFILTER:")!=NULL || strstr(cmd,"DMOSETVOLUME:") != NULL || strstr(cmd,"+VERSION")!=NULL || strstr(cmd,"DMOSETTAIL:") != NULL ) {
        token = strtok(cmd, ":");
        strcpy(p,token);
        while (token!=NULL) {
@@ -280,6 +286,26 @@ char* val;
        return;
     }
 
+float r=0.0;
+
+    if (strstr(cmd,"RSSI=")!=NULL) {
+       token = strtok(cmd, "=");
+       strcpy(p,token);
+       while (token!=NULL) {
+         token=strtok(NULL,"=");
+         if (token!=NULL) {
+            strcpy(val,token);
+            strcpy(d[pR].rc,val);
+            r=atof(val);
+            if (changeRSSI != NULL) {
+               changeRSSI(r);
+
+            }
+           (TRACE>=0x03 ? fprintf(stderr,"%s:parseCommand(): RSSI(%5.0f)\n",PROGRAMID,r) : _NOP);
+         }
+       } 
+       return;
+    }
 
     if (strstr(commandQueue,"S=") != NULL) {
 
@@ -293,18 +319,18 @@ char buffer[128];
 char* c;
 
 
-    (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() DRA818 Message status(%s)\n",PROGRAMID,BOOL2CHAR(d[pR].active)) : _NOP);
-
-     if (d[pR].active==true) {
-         d[pR].active=false;
-        (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() DRA818 Sending command(%s)\n",PROGRAMID,d[pR].command) : _NOP);
-
-         strcpy(buffer,d[pR].command);
-         strcat(buffer,"\r\n");
-         write(fd,buffer,strlen(buffer)); 
-         (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() Write Command[%s]\n",PROGRAMID,d[pR].command) : _NOP);
-         usleep(100000);
-     }
+//    (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() DRA818 Message status(%s)\n",PROGRAMID,BOOL2CHAR(d[pR].active)) : _NOP);
+//
+//     if (d[pR].active==true) {
+//         d[pR].active=false;
+//        (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() DRA818 Sending command(%s)\n",PROGRAMID,d[pR].command) : _NOP);
+//
+//         strcpy(buffer,d[pR].command);
+//         strcat(buffer,"\r\n");
+//         write(fd,buffer,strlen(buffer)); 
+//         (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() Write Command[%s]\n",PROGRAMID,d[pR].command) : _NOP);
+//         usleep(100000);
+//     }
 
 c=(char*)malloc(16);
 
@@ -324,21 +350,21 @@ int  n=read(fd,buffer,128);
                 if (strlen(commandQueue)==0) {
                     return;
                 }
-                (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() Buffer response identified[%s]\n",PROGRAMID,commandQueue) : _NOP);
+                (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() Response[%s]\n",PROGRAMID,commandQueue) : _NOP);
                 parseCommand();
                 pWrite=0x00;
-                d[pR].serviced=true;
-                if(strlen(d[pR].command)!=0) {
-                  (TRACE>=0x02 ? fprintf(stderr,"%s:processCommand() Command(%s) Response(%s) serviced rc(%s)\n",PROGRAMID,d[pR].command,d[pR].response,d[pR].rc) : _NOP);
-                  if (strcmp(d[pR].command,"AT+DMOCONNECT")==0 && strcmp(d[pR].response,"+DMOCONNECT:0")==0) {
-                     (TRACE>=0x02 ? fprintf(stderr,"%s:processCommand() Response to DMOCONNECT command recognized, receiver online\n",PROGRAMID) : _NOP);
-                     setWord(&MSW,RUN,true);
-                  }
-                  pR++;
-                  if (pR>15) {
-                      pR=0;
-                  }
-                }
+                //d[pR].serviced=true;
+                //if(strlen(d[pR].command)!=0) {
+                //  (TRACE>=0x02 ? fprintf(stderr,"%s:processCommand() Command(%s) Response(%s) serviced rc(%s)\n",PROGRAMID,d[pR].command,d[pR].response,d[pR].rc) : _NOP);
+                //  if (strcmp(d[pR].command,"AT+DMOCONNECT")==0 && strcmp(d[pR].response,"+DMOCONNECT:0")==0) {
+                //     (TRACE>=0x02 ? fprintf(stderr,"%s:processCommand() Response to DMOCONNECT command recognized, receiver online\n",PROGRAMID) : _NOP);
+                //     setWord(&MSW,RUN,true);
+                //  }
+                //  pR++;
+                //  if (pR>15) {
+                //      pR=0;
+                //  }
+                //}
               }
          }
      }
@@ -348,14 +374,20 @@ int  n=read(fd,buffer,128);
 //--------------------------------------------------------------------------------------------------
 void DRA818V::send_data(char* s) {
 
-    strcpy(d[pW].command,s);
-    d[pW].active=true;
-    d[pW].serviced=false;
-    d[pW].timeout=2000;
-    pW++;
-    if (pW>15) {
-        pW=0;
-    }
+    strcpy(buffer,s);
+    strcat(buffer,"\r\n");
+    write(fd,buffer,strlen(buffer)); 
+   (TRACE>=0x03 ? fprintf(stderr,"%s:processCommand() Write Command[%s]\n",PROGRAMID,s) : _NOP);
+    usleep(100000);
+
+//    strcpy(d[pW].command,s);
+//    d[pW].active=true;
+//    d[pW].serviced=false;
+//    d[pW].timeout=2000;
+//    pW++;
+//    if (pW>15) {
+//        pW=0;
+//    }
 
 }
 //---------------------------------------------------------------------------------------------------
@@ -369,6 +401,7 @@ int n = read (fd, buffer, len);
     }
     return 0;
 }
+
 //---------------------------------------------------------------------------------------------------
 // start operations
 //--------------------------------------------------------------------------------------------------
@@ -388,6 +421,11 @@ int DRA818V::start() {
 
      strcpy(command,"AT+VERSION");
      this->send_data(command);
+
+     strcpy(command,"AT+SETTAIL=0");
+     this->send_data(command);
+
+     sendRSSI();
 
      setWord(&MSW,RUN,true);
     (TRACE>=0x00 ? fprintf(stderr,"%s::start() serial interface(%s) active\n",PROGRAMID,portname) : _NOP);
@@ -491,7 +529,19 @@ void DRA818V::sendSetFilter() {
 
      sprintf(command,"AT+SETFILTER=%d,%d,%d",getWord(dra[m].STATUS,PEF),getWord(dra[m].STATUS,HPF),getWord(dra[m].STATUS,LPF));
      this->send_data(command);
-     //usleep(100000);
+}
+//--------------------------------------------------------------------------------------------------
+// This method sends the RSSI (Receiver Signal Strength Indicator)
+//--------------------------------------------------------------------------------------------------
+void DRA818V::sendRSSI() {
+
+    (TRACE>=0x03 ? fprintf(stderr,"%s::sendRSSI() Sending RSSI? command\n",PROGRAMID) : _NOP);
+
+     if (getWord(dra[0].STATUS,PT)==true) {return;}
+
+     strcpy(command,"RSSI?");
+     this->send_data(command);
+
 }
 //--------------------------------------------------------------------------------------------------
 // getter and setters for the different parameters (some validation performed)

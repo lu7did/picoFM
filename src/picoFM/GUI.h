@@ -261,6 +261,17 @@ void DRAchangePD() {
     (d->getPD()==false ? gpioWrite(GPIO_PD,0) : gpioWrite(GPIO_PD,1));
 
 }
+void showMeter();
+void DRAchangeRSSI(float rssi) {
+
+    (TRACE>=0x03 ? fprintf(stderr,"%s:DRAchangeRSSI() Signal report RSSI(%f)\n",PROGRAMID,rssi) : _NOP);
+    RSSI=rssi;
+    if (RSSI!=RSSIant) {
+       showMeter();
+       RSSIant=RSSI;
+    }
+
+}
 //*--------------------------------------------------------------------------------------------------
 //* setupDRA818V setup the DRA818V definitions
 //*--------------------------------------------------------------------------------------------------
@@ -268,7 +279,7 @@ void setupDRA818V() {
 
 //*---- setup  DRA818V
 
-    d=new DRA818V(DRAchangePTT,DRAchangePD,DRAchangeHL);
+    d=new DRA818V(DRAchangePTT,DRAchangePD,DRAchangeHL,DRAchangeRSSI);
     d->start();
 
     d->setRFW(f/1000000.0);
@@ -366,7 +377,6 @@ void showFrequency() {
         sprintf(LCD_Buffer,"%6.2f",vfo->get(VFOB)/1000000.0);
         lcd->println(2,1,LCD_Buffer);
         return;
-
      }
 
      if (vfo->vfo==VFOA) {
@@ -413,12 +423,9 @@ void showPTT() {
    lcd->write(0);
 }
 //*==================================================================================================
-
 void showMeter() {
 
      if (getWord(MSW,CMD)==true) {return;}
-
-     //lcd->setCursor(13,1);   //Placeholder Meter till a routine is developed for it
 
      if (vfo==nullptr) {
         (TRACE>=0x02 ? fprintf(stderr,"%s:showMeter() vfo pointer is NULL, request ignored\n",PROGRAMID) : _NOP);
@@ -426,21 +433,50 @@ void showMeter() {
      }
 
      if (d==nullptr) {return;}
-     
+     if (lcd==nullptr) {return;}
+
+     lcd->setCursor(13,1);
 int  n=0;
-     (getWord(d->dra[m].STATUS,SQ)==true ? n=1 : n=0);
-     (TRACE>=0x03 ? fprintf(stderr,"%s:showMeter() segments(%d)\n",PROGRAMID,n) : _NOP);
+    
+     if (RSSI<55) {n=0;}
+     if (RSSI>=55 && RSSI <60 )   {n=1;}
+     if (RSSI>=61 && RSSI <67 )   {n=2;}
+     if (RSSI>=67 && RSSI <73 )   {n=3;}
+     if (RSSI>=73 && RSSI <79 )   {n=4;}
+     if (RSSI>=79 && RSSI <85 )   {n=5;}
+     if (RSSI>=85 && RSSI <91 )   {n=6;}
+     if (RSSI>=91 && RSSI <97 )   {n=7;}
+     if (RSSI>=97 && RSSI <103 )  {n=8;}
+     if (RSSI>=103 && RSSI <109 ) {n=9;}
+     if (RSSI>=109 && RSSI <115 ) {n=10;}
+     if (RSSI>=115 && RSSI <120 ) {n=11;}
+     if (RSSI>=120 && RSSI <125 ) {n=12;}
+     if (RSSI>=125 && RSSI <130 ) {n=13;}
+     if (RSSI>=130 && RSSI <135 ) {n=14;}
+     if (RSSI>=135 && RSSI <135 ) {n=15;}
+
+     if (nant!=-1) {
+        if (n==nant) {return;}
+     }
+     nant=n;
+
      switch(n) {
-        case 0 : {
-                  strcpy(LCD_Buffer," ");
-                  lcd->println(14,1,LCD_Buffer);
-                  break;
-                 }
-        case 1 : {
-                  lcd->setCursor(14,1);
-                  lcd->write(byte(255));
-                  break;
-                 }
+       case  0: {lcd->print(" ");lcd->print(" ");lcd->print(" ");break;}
+       case  1: {lcd->write(byte(1));lcd->print(" ");lcd->print(" ");break;}
+       case  2: {lcd->write(byte(2));lcd->print(" ");lcd->print(" ");break;}
+       case  3: {lcd->write(byte(3));lcd->print(" ");lcd->print(" ");break;}
+       case  4: {lcd->write(byte(4));lcd->print(" ");lcd->print(" ");break;}
+       case  5: {lcd->write(byte(255));lcd->print(" ");lcd->print(" ");break;}
+       case  6: {lcd->write(byte(255));lcd->write(byte(1));lcd->print(" ");}
+       case  7: {lcd->write(byte(255));lcd->write(byte(2));lcd->print(" ");break;}
+       case  8: {lcd->write(byte(255));lcd->write(byte(3));lcd->print(" ");break;}
+       case  9: {lcd->write(byte(255));lcd->write(byte(4));lcd->print(" ");break;}
+       case 10: {lcd->write(byte(255));lcd->write(byte(255));lcd->print(" ");break;}
+       case 11: {lcd->write(byte(255));lcd->write(byte(255));lcd->write(byte(1));break;}
+       case 12: {lcd->write(byte(255));lcd->write(byte(255));lcd->write(byte(2));break;}
+       case 13: {lcd->write(byte(255));lcd->write(byte(255));lcd->write(byte(3));break;}
+       case 14: {lcd->write(byte(255));lcd->write(byte(255));lcd->write(byte(4));break;}
+       case 15: {lcd->write(byte(255));lcd->write(byte(255));lcd->write(byte(255));break;}
      }
      usleep(10000);
      return;
@@ -464,7 +500,6 @@ void showShift() {
 
 }
 //*==================================================================================================
-
 void showCTCSS() {
 
     if (d==nullptr) {return;}
@@ -512,7 +547,6 @@ void showVFOMEM() {
 //*==================================================================================================
 //* Show the entire VFO panel at once
 //*==================================================================================================
-
 void showPanel() {
     if (lcd==nullptr) {return;}
 
@@ -529,6 +563,7 @@ void showPanel() {
     showHL();
     showPD();
     showVFOMEM();
+    nant=-1;
     showMeter();
 }
 
@@ -573,8 +608,15 @@ void changeVfoHandler(byte S) {
    if (getWord(S,VFO)==true) {
       if (vfo==nullptr) {return;}
       (TRACE>=0x02 ? fprintf(stderr,"%s:changeVfoHandler() change VFO S(%s) On\n",PROGRAMID,BOOL2CHAR(getWord(vfo->FT817,VFO))) : _NOP);
+
+      if (d==nullptr) {return;}
+      d->setRFW(vfo->get()/1000000.0);
+      d->setTFW(d->getRFW()+(vfo->getShift()/1000000));
+      d->sendSetGroup();
+
       showVFO();
       showChange();
+      showFrequency();
    }
 
 }
@@ -634,8 +676,16 @@ void processGUI() {
            showChange();
         }
 
-        if (getWord(GSW,FSW)==true) {   // switch to menu mode
+        if (getWord(GSW,FSW)==true) {
            setWord(&GSW,FSW,false);
+           if (vfo!=nullptr) {
+              vfo->swapVFO();
+           }
+
+        }
+
+        if (getWord(GSW,FSWL)==true) {   // switch to menu mode
+           setWord(&GSW,FSWL,false);
            setWord(&MSW,CMD,true);
            setWord(&MSW,GUI,false);
            //lcd->clear();

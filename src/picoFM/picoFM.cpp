@@ -120,6 +120,7 @@ int counter=0;
 int clkLastState=0; 
 int pushPTT=0;
 int pushSQL=0;
+
 //* --- Define minIni related parameters (configuration persistence)
 
 char inifile[80];
@@ -148,7 +149,7 @@ MMS* paddir;
 int  TBCK=0;
 int  TSAVE=0;
 int  TVFO=0;
-
+int  TRSSI=0;
 // *----------------------------------------------------------------*
 // *               Initial setup values                             *
 // *----------------------------------------------------------------*
@@ -165,7 +166,9 @@ float rx_ctcss=0;
 float tx_ctcss=0;
 bool  bPD=true;
 bool  bHL=false;
-
+int   RSSI=135;
+int   RSSIant=135;
+int   nant=-1;
 byte  col=0;
 struct sigaction sigact;
 CallBackTimer* masterTimer;
@@ -218,10 +221,22 @@ static void sighandler(int signum)
 void ISRHandler() {
 
 
-   if (TVFO==0) return;
-   TVFO--;
-   if (TVFO==0) {setWord(&SSW,FVFO,true);}
+   if (TVFO!=0) {
+       TVFO--;
+       if (TVFO==0) {
+           setWord(&SSW,FVFO,true);
+       }
+   }
 
+   if (TRSSI!=0) {
+       TRSSI--;
+       if (TRSSI==0) {
+          if (d!=nullptr) {
+              d->sendRSSI();
+          }
+          TRSSI=1000;
+       }
+   }
    return;
 
 }
@@ -377,6 +392,9 @@ while(true)
 
     (TRACE>=0x01 ? fprintf(stderr,"%s:main() Display main panel\n",PROGRAMID) : _NOP);
     showPanel();
+
+
+    TRSSI=1000;
 
 char buf [100];
 
