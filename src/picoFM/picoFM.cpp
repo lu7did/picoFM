@@ -129,22 +129,59 @@ long nIni;
 int  sIni,kIni;
 char iniSection[50];
 
-MMS* straight;
-MMS* iambicA;
-MMS* iambicB;
-MMS* spval;
-MMS* stval;
-MMS* shval;
-MMS* drval;
-MMS* modval;
-MMS* backval;
-MMS* coolon;
-MMS* coolof;
-MMS* bcnon;
-MMS* bcnoff;
-MMS* paddle;
-MMS* padrev;
-MMS* paddir;
+// *----------------------------------------------------------------*
+// *                Manu Subsytem definitions                       *
+// *----------------------------------------------------------------*
+MMS* root;
+MMS* mnu_BW;
+MMS* mnu_Vol;
+MMS* mnu_Sql;
+MMS* mnu_Rx_CTCSS;
+MMS* mnu_Tx_CTCSS;
+MMS* mnu_Ofs;
+MMS* mnu_PFE;
+MMS* mnu_LPF;
+MMS* mnu_HPF;
+MMS* mnu_Mode;
+MMS* mnu_HL;
+MMS* mnu_PD;
+MMS* mnu_Backlight;
+MMS* mnu_Step;
+MMS* mnu_Watchdog;
+
+MMS* mnu_BW_12KHZ;
+MMS* mnu_BW_25KHZ;
+
+MMS* mnu_Ofs_None;
+MMS* mnu_Ofs_Plus;
+MMS* mnu_Ofs_Minus;
+
+MMS* mnu_PFE_Off;
+MMS* mnu_PFE_On;
+
+MMS* mnu_LPF_Off;
+MMS* mnu_LPF_On;
+
+MMS* mnu_HPF_Off;
+MMS* mnu_HPF_On;
+
+MMS* mnu_HL_Off;
+MMS* mnu_HL_On;
+
+MMS* mnu_PD_Off;
+MMS* mnu_PD_On;
+
+MMS* mnu_Step_10KHZ;
+MMS* mnu_Step_5KHZ;
+
+MMS* mnu_Backlight_Off;
+MMS* mnu_Backlight_On;
+
+MMS* mnu_Watchdog_Off;
+MMS* mnu_Watchdog_On;
+
+
+
 
 int  TBCK=0;
 int  TSAVE=0;
@@ -390,9 +427,10 @@ while(true)
     (TRACE>=0x01 ? fprintf(stderr,"%s:main() Setup DRA818V chipset sub-system\n",PROGRAMID) : _NOP);
     setupDRA818V();
 
+    setupMMS();
+
     (TRACE>=0x01 ? fprintf(stderr,"%s:main() Display main panel\n",PROGRAMID) : _NOP);
     showPanel();
-
 
     TRSSI=1000;
 

@@ -304,11 +304,29 @@ void setupDRA818V() {
     d->setPTT(false);
     return;
 }
-//*==================================================================================================
-// Define handlers for the different segments of the LCD display
-//*==================================================================================================
+//====================================================================================================================== 
+// showMenu()
+//====================================================================================================================== 
 void showMenu() {
-    lcd->clear();
+
+     MMS*  menu=root->curr;
+     int   i=menu->mVal;
+     char* m=menu->mText;
+
+     MMS*  child=menu->curr;
+     int   j=child->mVal;
+     char* t=child->mText;
+
+     sprintf(LCD_Buffer," %02d %s",i,m);
+     lcd->println(1,0,LCD_Buffer);
+
+     sprintf(LCD_Buffer," %s",t);
+     lcd->println(1,1,t);
+
+     if (getWord(MSW,CMD)==true && getWord(MSW,GUI)==true) {
+        lcd->setCursor(0,1);
+        lcd->typeChar((char)126);
+     }
 }
 //*==================================================================================================
 void showVFO() {
@@ -640,6 +658,10 @@ char* b;
 
 }
 
+
+void nextMenu(int dir) {
+     root->move(dir);
+}
 //*--------------------------------------------------------------------------------------------------
 //* processGUI() handles the update of the main panel, the menu panel or the item panel
 //*--------------------------------------------------------------------------------------------------
@@ -688,7 +710,7 @@ void processGUI() {
            setWord(&GSW,FSWL,false);
            setWord(&MSW,CMD,true);
            setWord(&MSW,GUI,false);
-           //lcd->clear();
+           lcd->clear();
            showMenu();
         }
 
@@ -717,14 +739,14 @@ void processGUI() {
 
         if (getWord(GSW,ECW)==true) {  //while in menu mode turn knob clockwise
            setWord(&GSW,ECW,false);
-           //nextMenu(+1);
+           nextMenu(+1);
 	   lcd->clear();
            showMenu();
         }
 
         if (getWord(GSW,ECCW)==true) {  //while in menu mode turn knob counterclockwise
            setWord(&GSW,ECCW,false);
-           //nextMenu(-1);
+           nextMenu(-1);
            lcd->clear();
            showMenu();
         }
@@ -732,10 +754,10 @@ void processGUI() {
 
         if (getWord(GSW,FSWL)==true) {  //while in menu mode transition to GUI mode (backup)
            setWord(&GSW,FSWL,false);
-           setWord(&MSW,GUI,true);
-           lcd->clear();
+           //setWord(&MSW,GUI,true);
+           //lcd->clear();
            //backupMenu();
-           showMenu();
+           //showMenu();
         }
 
         if (getWord(SSW,FSAVE)==true) { //restore menu after saving message
@@ -745,6 +767,135 @@ void processGUI() {
         }
      }
 
+}
 
 //*=====================================================================================================
+void procUpdateBW(MMS* p) {}
+void procUpdateVol(MMS* p) {}
+void procUpdateSql(MMS* p) {}
+void procUpdateRxCTCSS(MMS* p) {}
+void procUpdateTxCTCSS(MMS* p) {}
+void procUpdateOfs(MMS* p) {}
+void procUpdatePFE(MMS* p) {}
+void procUpdateLPF(MMS* p) {}
+void procUpdateHPF(MMS* p) {}
+void procUpdateHL(MMS* p) {}
+void procUpdatePD(MMS* p) {}
+void procUpdateBacklight(MMS* p) {}
+void procUpdateStep(MMS* p) {}
+void procUpdateWatchdog(MMS* p) {}
+
+void procChangeVol(MMS* p) {}
+void procChangeSql(MMS* p) {}
+void procChangeRxCTCSS(MMS* p) {}
+void procChangeTxCTCSS(MMS* p) {}
+
+
+void setupMMS() {
+
+     root=new MMS(0,(char*)"root",NULL,NULL);
+     root->TRACE=TRACE;
+
+
+     mnu_BW  =  new MMS(1,(char*)"Bandwidth",NULL,procUpdateBW);
+     mnu_Vol =  new MMS(2,(char*)"Volume",procChangeVol,procUpdateVol);
+     mnu_Sql =  new MMS(3,(char*)"Squelch",procChangeSql,procUpdateSql);
+     mnu_Rx_CTCSS= new MMS(4,(char*)"Rx CTCSS",procChangeRxCTCSS,procUpdateRxCTCSS);
+     mnu_Tx_CTCSS= new MMS(5,(char*)"Tx CTCSS",procChangeTxCTCSS,procUpdateTxCTCSS);
+     mnu_Ofs =  new MMS(6,(char*)"Offset",NULL,procUpdateOfs);
+     mnu_PFE =  new MMS(7,(char*)"Pre-Emphasis",NULL,procUpdatePFE);
+     mnu_LPF =  new MMS(8,(char*)"Low Pass Filter",NULL,procUpdateLPF);
+     mnu_HPF =  new MMS(9,(char*)"High Pass Filter",NULL,procUpdateHPF);
+     mnu_HL  =  new MMS(10,(char*)"Power",NULL,procUpdateHL);
+     mnu_PD  =  new MMS(11,(char*)"Power Saving",NULL,procUpdatePD);
+     mnu_Backlight = new MMS(12,(char*)"Backlight",NULL,procUpdateBacklight);
+     mnu_Step=  new MMS(13,(char*)"Step",NULL,procUpdateStep);
+     mnu_Watchdog = new MMS(14,(char*)"Watchdog",NULL,procUpdateWatchdog);
+
+     root->add(mnu_BW);
+     root->add(mnu_Vol);
+     root->add(mnu_Sql);
+     root->add(mnu_Rx_CTCSS);
+     root->add(mnu_Tx_CTCSS);
+     root->add(mnu_Ofs);
+     root->add(mnu_PFE);
+     root->add(mnu_LPF);
+     root->add(mnu_HPF);
+     root->add(mnu_LPF);
+     root->add(mnu_HL);
+     root->add(mnu_PD);
+     root->add(mnu_Backlight);
+     root->add(mnu_Step);
+     root->add(mnu_Watchdog);
+
+//*--- 
+
+
+     mnu_BW_12KHZ = new MMS(0,(char*)"12.5 KHz",NULL,NULL);
+     mnu_BW_25KHZ = new MMS(0,(char*)"25.0 KHz",NULL,NULL);
+
+     mnu_BW->add(mnu_BW_12KHZ);
+     mnu_BW->add(mnu_BW_25KHZ);
+
+     mnu_Ofs_None= new MMS(0,(char*)"Simplex",NULL,NULL);
+     mnu_Ofs_Plus= new MMS(1,(char*)"+600 KHz",NULL,NULL);
+     mnu_Ofs_Minus=new MMS(2,(char*)"-600 KHz",NULL,NULL);
+
+     mnu_Ofs->add(mnu_Ofs_None);
+     mnu_Ofs->add(mnu_Ofs_Plus);
+     mnu_Ofs->add(mnu_Ofs_Minus);
+
+
+     mnu_PFE_Off = new MMS(0,(char*)"Off",NULL,NULL);
+     mnu_PFE_On  = new MMS(1,(char*)"On",NULL,NULL);
+
+     mnu_LPF_Off = new MMS(0,(char*)"Off",NULL,NULL);
+     mnu_LPF_On  = new MMS(1,(char*)"On",NULL,NULL);
+
+     mnu_HPF_Off = new MMS(0,(char*)"Off",NULL,NULL);
+     mnu_HPF_On  = new MMS(1,(char*)"On",NULL,NULL);
+
+     mnu_HL_Off = new MMS(0,(char*)"Low Power",NULL,NULL);
+     mnu_HL_On  = new MMS(1,(char*)"High Power",NULL,NULL);
+
+     mnu_PD_Off = new MMS(0,(char*)"Off",NULL,NULL);
+     mnu_PD_On  = new MMS(1,(char*)"On",NULL,NULL);
+
+     mnu_Backlight_Off = new MMS(0,(char*)"Off",NULL,NULL);
+     mnu_Backlight_On  = new MMS(1,(char*)"On",NULL,NULL);
+
+     mnu_Step_10KHZ = new MMS(0,(char*)"10 KHz",NULL,NULL);
+     mnu_Step_5KHZ  = new MMS(1,(char*)" 5 KHz",NULL,NULL);
+
+     mnu_Watchdog_Off = new MMS(0,(char*)"Off",NULL,NULL);
+     mnu_Watchdog_On  = new MMS(1,(char*)"On",NULL,NULL);
+
+     mnu_PFE->add(mnu_PFE_Off);
+     mnu_PFE->add(mnu_PFE_On);
+
+     mnu_LPF->add(mnu_LPF_Off);
+     mnu_LPF->add(mnu_LPF_On);
+
+     mnu_HPF->add(mnu_HPF_Off);
+     mnu_HPF->add(mnu_HPF_On);
+
+     mnu_HL->add(mnu_HL_Off);
+     mnu_HL->add(mnu_HL_On);
+
+     mnu_PD->add(mnu_PD_Off);
+     mnu_PD->add(mnu_PD_On);
+
+     mnu_Backlight->add(mnu_Backlight_Off);
+     mnu_Backlight->add(mnu_Backlight_On);
+
+     mnu_Watchdog->add(mnu_Watchdog_Off);
+     mnu_Watchdog->add(mnu_Watchdog_On);
+
+     mnu_Step->add(mnu_Step_10KHZ);
+     mnu_Step->add(mnu_Step_5KHZ);
+
+
+
+
+
 }
