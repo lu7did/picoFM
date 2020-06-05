@@ -152,6 +152,12 @@ MMS* mnu_Watchdog;
 MMS* mnu_BW_12KHZ;
 MMS* mnu_BW_25KHZ;
 
+MMS* mnu_Vol_sp;
+MMS* mnu_Sql_sp;
+
+MMS* mnu_Rx_CTCSS_sp;
+MMS* mnu_Tx_CTCSS_sp;
+
 MMS* mnu_Ofs_None;
 MMS* mnu_Ofs_Plus;
 MMS* mnu_Ofs_Minus;
@@ -203,6 +209,9 @@ float rx_ctcss=0;
 float tx_ctcss=0;
 bool  bPD=true;
 bool  bHL=false;
+bool  bPFE=false;
+bool  bLPF=false;
+bool  bHPF=false;
 int   RSSI=135;
 int   RSSIant=135;
 int   nant=-1;
@@ -288,6 +297,11 @@ fprintf(stderr,"\n%s version %s build (%s)\n"
 "Usage:\npicoFM  [-f frequency {144000000..147999999 Hz}]\n"
 "                [-o offset (+/-Hz) default=0)]\n"
 "                [-v volume (0..8 default=5)]\n"
+"                [-p high power]\n"
+"                [-z low energy]\n"
+"                [-1 pre-emphasis]\n"
+"                [-2 low pass filter]\n"
+"                [-3 high pass filter]\n"
 "                [-s squelch(0..8 default=5)]\n"
 "                [-r Rx CTCSS (0..38 default=0)]\n"
 "                [-t Tx CTCSS (0..38 default=0)]\n"
@@ -313,7 +327,7 @@ int main(int argc, char* argv[])
 
 while(true)
         {
-                a = getopt(argc, argv, "o:s:r:t:x:v:f:hzp?");
+                a = getopt(argc, argv, "o:s:r:t:x:v:f:hzp123?");
 
                 if(a == -1) 
                 {
@@ -347,6 +361,18 @@ while(true)
                 case 'z':
                         bPD=true;
                         fprintf(stderr,"%s:main() args(power saving)=%s\n",PROGRAMID,BOOL2CHAR(bPD));
+                        break;
+                case '1':
+                        bPFE=true;
+                        fprintf(stderr,"%s:main() args(pre-emphasis)=%s\n",PROGRAMID,BOOL2CHAR(bPFE));
+                        break;
+                case '2':
+                        bLPF=true;
+                        fprintf(stderr,"%s:main() args(low pass filter)=%s\n",PROGRAMID,BOOL2CHAR(bLPF));
+                        break;
+                case '3':
+                        bHPF=true;
+                        fprintf(stderr,"%s:main() args(high pass filter)=%s\n",PROGRAMID,BOOL2CHAR(bHPF));
                         break;
                 case 'p':
                         bHL=true;

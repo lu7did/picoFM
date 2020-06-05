@@ -302,6 +302,13 @@ void setupDRA818V() {
     d->sendSetFilter();
 
     d->setPTT(false);
+
+    setWord(&d->dra[m].STATUS,PD,bPD);
+    setWord(&d->dra[m].STATUS,PEF,bPFE);
+    setWord(&d->dra[m].STATUS,HPF,bHPF);
+    setWord(&d->dra[m].STATUS,LPF,bLPF);
+    setWord(&d->dra[m].STATUS,HL,bHL);
+
     return;
 }
 //====================================================================================================================== 
@@ -785,17 +792,83 @@ void procUpdateBacklight(MMS* p) {}
 void procUpdateStep(MMS* p) {}
 void procUpdateWatchdog(MMS* p) {}
 
-void procChangeVol(MMS* p) {}
-void procChangeSql(MMS* p) {}
-void procChangeRxCTCSS(MMS* p) {}
-void procChangeTxCTCSS(MMS* p) {}
+void procChangeVol(MMS* p) {
+
+char f[9];
+char lev[2];
+int  k = 255;
+char c = k;
+
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procChangeVol %d [%s] \n",PROGRAMID,p->mVal,f) : _NOP);
+
+     sprintf(lev,"%c", c); //prints A
+     if (p->mVal>8) { p->mVal=8;}
+     if (p->mVal<0) { p->mVal=0;}
+
+     strcpy(f,"        ");
+     for (int i=0;i<p->mVal;i++) {
+         f[i]=lev[0];
+     }
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procChangeVol %d [%s] \n",PROGRAMID,p->mVal,f) : _NOP);
+     sprintf(p->mText," %d [%s]",p->mVal,f);
+
+}
+void procChangeSql(MMS* p) {
+
+char f[9];
+char lev[2];
+int  k = 255;
+char c = k;
+
+     sprintf(lev,"%c", c); //prints A
+     if (p->mVal>8) { p->mVal=8;}
+     if (p->mVal<0) { p->mVal=0;}
+
+     strcpy(f,"        ");
+     for (int i=0;i<p->mVal;i++) {
+         f[i]=lev[0];
+     }
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procChangeSql %d [%s] \n",PROGRAMID,p->mVal,f) : _NOP);
+     sprintf(p->mText," %d [%s]",p->mVal,f);
+
+}
+
+void procChangeRxCTCSS(MMS* p) {
+
+char buffer[16];
+
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procChangeRxCTCSS() \n",PROGRAMID) : _NOP);
+     if (p->mVal<0) {p->mVal=0;}
+     if (p->mVal>38) {p->mVal=38;}
+     if (p->mVal!=0) {
+         sprintf(buffer,"%5.1f",d->CTCSStoTone(p->mVal));
+         sprintf(p->mText,"%s Hz",buffer);
+     } else {
+         sprintf(p->mText,"No tone");
+     }
+
+}
+void procChangeTxCTCSS(MMS* p) {
+
+char buffer[16];
+
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procChangeTxCTCSS() \n",PROGRAMID) : _NOP);
+     if (p->mVal<0) {p->mVal=0;}
+     if (p->mVal>38) {p->mVal=38;}
+     if (p->mVal!=0) {
+        sprintf(buffer,"%5.1f",d->CTCSStoTone(p->mVal));
+        sprintf(p->mText,"%s Hz",buffer);
+     } else {
+        sprintf(p->mText,"No tone");
+     }
+
+}
 
 
 void setupMMS() {
 
      root=new MMS(0,(char*)"root",NULL,NULL);
      root->TRACE=TRACE;
-
 
      mnu_BW  =  new MMS(1,(char*)"Bandwidth",NULL,procUpdateBW);
      mnu_Vol =  new MMS(2,(char*)"Volume",procChangeVol,procUpdateVol);
@@ -832,10 +905,33 @@ void setupMMS() {
 
 
      mnu_BW_12KHZ = new MMS(0,(char*)"12.5 KHz",NULL,NULL);
-     mnu_BW_25KHZ = new MMS(0,(char*)"25.0 KHz",NULL,NULL);
+     mnu_BW_25KHZ = new MMS(1,(char*)"25.0 KHz",NULL,NULL);
 
      mnu_BW->add(mnu_BW_12KHZ);
      mnu_BW->add(mnu_BW_25KHZ);
+
+     mnu_Vol_sp=new MMS(7,(char*)"*",NULL,NULL);
+     mnu_Sql_sp=new MMS(1,(char*)"*",NULL,NULL);
+
+     mnu_Rx_CTCSS_sp=new MMS(0,(char*)"*",NULL,NULL);
+     mnu_Tx_CTCSS_sp=new MMS(0,(char*)"*",NULL,NULL);
+
+     mnu_Rx_CTCSS->add(mnu_Rx_CTCSS_sp);
+     mnu_Tx_CTCSS->add(mnu_Tx_CTCSS_sp);
+
+     mnu_Rx_CTCSS->lowerLimit(0);
+     mnu_Rx_CTCSS->upperLimit(38);
+
+     mnu_Tx_CTCSS->lowerLimit(0);
+     mnu_Tx_CTCSS->upperLimit(38);
+
+     mnu_Vol->add(mnu_Vol_sp);
+     mnu_Vol->lowerLimit(0);
+     mnu_Vol->upperLimit(8);
+
+     mnu_Sql->add(mnu_Sql_sp);
+     mnu_Sql->lowerLimit(0);
+     mnu_Sql->upperLimit(8);
 
      mnu_Ofs_None= new MMS(0,(char*)"Simplex",NULL,NULL);
      mnu_Ofs_Plus= new MMS(1,(char*)"+600 KHz",NULL,NULL);
@@ -895,7 +991,10 @@ void setupMMS() {
      mnu_Step->add(mnu_Step_5KHZ);
 
 
-
-
+     (getWord(d->dra[m].STATUS,PEF)==false ? mnu_PFE->setChild(0) : mnu_PFE->setChild(1));
+     (getWord(d->dra[m].STATUS,HPF)==false ? mnu_HPF->setChild(0) : mnu_HPF->setChild(1));
+     (getWord(d->dra[m].STATUS,LPF)==false ? mnu_LPF->setChild(0) : mnu_LPF->setChild(1));
+     (getWord(d->dra[m].STATUS,HL)==false ? mnu_HL->setChild(0) : mnu_HL->setChild(1));
+     (getWord(d->dra[m].STATUS,PD)==false ? mnu_PD->setChild(0) : mnu_PD->setChild(1));
 
 }
