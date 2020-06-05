@@ -316,19 +316,24 @@ void setupDRA818V() {
 //====================================================================================================================== 
 void showMenu() {
 
-     MMS*  menu=root->curr;
-     int   i=menu->mVal;
-     char* m=menu->mText;
-
-     MMS*  child=menu->curr;
-     int   j=child->mVal;
-     char* t=child->mText;
+MMS*  menu=root->curr;
+int   i=menu->mVal;
+char* m=menu->mText;
 
      sprintf(LCD_Buffer," %02d %s",i,m);
      lcd->println(1,0,LCD_Buffer);
 
-     sprintf(LCD_Buffer," %s",t);
-     lcd->println(1,1,t);
+char* t;
+
+     MMS*  child=menu->curr;
+     if (child!=NULL) {
+         t=child->mText;
+         sprintf(LCD_Buffer," %s",t);
+         lcd->println(1,1,t);
+     } else {
+         t=NULL;
+         return;
+     }
 
      if (getWord(MSW,CMD)==true && getWord(MSW,GUI)==true) {
         lcd->setCursor(0,1);
