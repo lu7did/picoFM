@@ -3,6 +3,7 @@
 //--------------------------------------------------------------------------------------------------
 void setBacklight(bool v) {
 
+    return;
     if (lcd==nullptr) return;
     lcd->backlight(v);
     lcd->setCursor(0,0);
