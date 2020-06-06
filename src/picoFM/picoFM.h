@@ -104,7 +104,7 @@
 #define COOLER    0B00010000   //redefinition DOG == RIT
 #define RUN       0B00100000
 #define RETRY     0B01000000
-#define BCK       0B10000000
+#define WATCHDOG  0B10000000
 #define QUIET     0B10000000
 
 //*--- GUI System Word (GSW)

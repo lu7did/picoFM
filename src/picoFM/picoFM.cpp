@@ -193,6 +193,8 @@ int  TBCK=0;
 int  TSAVE=0;
 int  TVFO=0;
 int  TRSSI=0;
+int  TBACKLIGHT=0;
+int  TWATCHDOG=0;
 // *----------------------------------------------------------------*
 // *               Initial setup values                             *
 // *----------------------------------------------------------------*
@@ -204,6 +206,7 @@ int   sql=1;
 char  callsign[16];
 char  grid[16];
 int   backlight=0;
+int   watchdog=0;
 bool  cooler=false;
 float rx_ctcss=0;
 float tx_ctcss=0;
@@ -283,6 +286,22 @@ void ISRHandler() {
           TRSSI=1000;
        }
    }
+
+
+   if (TBACKLIGHT!=0) {
+       TBACKLIGHT--;
+       if (TBACKLIGHT==0) {
+          setBacklight(false);
+       }
+   }
+
+   if (TWATCHDOG!=0) {
+       TWATCHDOG--;
+       if (TWATCHDOG==0) {
+          if (vfo!=nullptr) {setWord(&vfo->FT817,WATCHDOG,true); vfo->setPTT(false);}
+       }
+   }
+
    return;
 
 }
@@ -297,6 +316,8 @@ fprintf(stderr,"\n%s version %s build (%s)\n"
 "Usage:\npicoFM  [-f frequency {144000000..147999999 Hz}]\n"
 "                [-o offset (+/-Hz) default=0)]\n"
 "                [-v volume (0..8 default=5)]\n"
+"                [-b backlight (0..60 default=0)]\n"
+"                [-w watchdog (0..90 default=0)]\n"
 "                [-p high power]\n"
 "                [-z low energy]\n"
 "                [-1 pre-emphasis]\n"
@@ -327,7 +348,7 @@ int main(int argc, char* argv[])
 
 while(true)
         {
-                a = getopt(argc, argv, "o:s:r:t:x:v:f:hzp123?");
+                a = getopt(argc, argv, "o:s:r:t:x:v:b:w:f:hzp123?");
 
                 if(a == -1) 
                 {
@@ -353,6 +374,14 @@ while(true)
                 case 'v':
                         vol=atoi(optarg);
                         fprintf(stderr,"%s:main() args(volume)=%d\n",PROGRAMID,vol);
+                        break;
+                case 'b':
+                        backlight=atoi(optarg);
+                        fprintf(stderr,"%s:main() args(backlight)=%d\n",PROGRAMID,backlight);
+                        break;
+                case 'w':
+                        watchdog=atoi(optarg);
+                        fprintf(stderr,"%s:main() args(watchdog)=%d\n",PROGRAMID,watchdog);
                         break;
                 case 's':
                         sql=atoi(optarg);

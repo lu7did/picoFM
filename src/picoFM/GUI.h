@@ -2,9 +2,11 @@
 // Turn backlight on/off
 //--------------------------------------------------------------------------------------------------
 void setBacklight(bool v) {
+
     if (lcd==nullptr) return;
     lcd->backlight(v);
     lcd->setCursor(0,0);
+    if (backlight!=0) { TBACKLIGHT=backlight; }
 }
 //--------------------------------------------------------------------------------------------------
 // returns the time in a string format
@@ -61,7 +63,7 @@ void updateEncoders(int gpio, int level, uint32_t tick)
            return;
         }
 
-        //setBacklight(true);
+        setBacklight(true);
 
         if (getWord(GSW,ECW)==true || getWord(GSW,ECCW) ==true) { //exit if pending to service a previous one
            (TRACE>=0x02 ? fprintf(stderr,"%s:updateEnconders() Last CW/CCW signal pending processsing, ignored!\n",PROGRAMID) : _NOP);
@@ -100,6 +102,7 @@ void updateSW(int gpio, int level, uint32_t tick)
 {
 
      setBacklight(true);
+
      if (level != 0) {
         endPush = std::chrono::system_clock::now();
         int lapPush=std::chrono::duration_cast<std::chrono::milliseconds>(endPush - startPush).count();
@@ -130,6 +133,8 @@ void updateSW(int gpio, int level, uint32_t tick)
 void updateSQL(int gpio, int level, uint32_t tick)
 {
 
+     setBacklight(true);
+
      if (level != 0) {
         endSQL = std::chrono::system_clock::now();
         int lapSQL=std::chrono::duration_cast<std::chrono::milliseconds>(endSQL - startSQL).count();
@@ -158,6 +163,9 @@ void updateMICPTT(int gpio, int level, uint32_t tick)
         pushPTT=1;
        (TRACE>=0x03 ? fprintf(stderr,"%s:updateMICPTT() GPIO level up pushPTT(%d)\n",PROGRAMID,pushPTT) : _NOP);
         setWord(&GSW,FPTT,true);
+        if (watchdog!=0) {
+            TWATCHDOG=watchdog;
+        }
         return;
      }
      startPTT = std::chrono::system_clock::now();
@@ -165,7 +173,7 @@ void updateMICPTT(int gpio, int level, uint32_t tick)
      pushPTT=0;
      setWord(&GSW,FPTT,true);
     (TRACE>=0x03 ? fprintf(stderr,"%s:updateMICPTT() GPIO level down pushPTT(%d)\n",PROGRAMID,pushPTT) : _NOP);
-
+     setWord(&vfo->FT817,WATCHDOG,false);
 }
 //*--------------------------------------------------------------------------------------------------
 //* setupGPIO setup the GPIO definitions
@@ -321,7 +329,7 @@ int   i=menu->mVal;
 char* m=menu->mText;
 
      sprintf(LCD_Buffer," %02d %s",i,m);
-     lcd->println(1,0,LCD_Buffer);
+     lcd->println(0,0,LCD_Buffer);
 
 char* t;
 
@@ -630,7 +638,12 @@ void changeVfoHandler(byte S) {
       if (d==nullptr) {return;}
 
       (TRACE>=0x02 ? fprintf(stderr,"%s:changeVfoHandler() change PTT S(%s) On\n",PROGRAMID,BOOL2CHAR(getWord(vfo->FT817,PTT))) : _NOP);
-      d->setPTT(getWord(vfo->FT817,PTT));
+      if (getWord(vfo->FT817,WATCHDOG) == false) {
+          d->setPTT(getWord(vfo->FT817,PTT));
+      } else {
+          vfo->setPTT(false);
+         (TRACE>=0x00 ? fprintf(stderr,"%s:changeVfoHandler() watchdog activated PTT S(%s) disabled\n",PROGRAMID,BOOL2CHAR(getWord(vfo->FT817,PTT))) : _NOP);
+      }
       showPTT();
       showFrequency();
 
@@ -674,6 +687,30 @@ char* b;
 void nextMenu(int dir) {
      root->move(dir);
 }
+
+void nextChild(int dir) {
+     root->curr->move(dir);
+}
+
+//*---  backup menu
+
+void backupMenu() {
+     (TRACE>=0x02 ? fprintf(stderr,"%s:backupMenu() Saving mVal(%d) mText(%s)\n",PROGRAMID,root->curr->mVal,root->curr->mText) : _NOP);
+     root->curr->backup();
+}
+//*---  save menu
+
+void saveMenu() {
+     (TRACE>=0x02 ? fprintf(stderr,"%s:saveMenu() Saving mVal(%d) mText(%s)\n",PROGRAMID,root->curr->mVal,root->curr->mText) : _NOP);
+     root->curr->save();
+}
+//*---  restore menu
+
+void restoreMenu() {
+     (TRACE>=0x02 ? fprintf(stderr,"%s:restoreMenu() Saving mVal(%d) mText(%s)\n",PROGRAMID,root->curr->mVal,root->curr->mText) : _NOP);
+     root->curr->restore();
+}
+
 //*--------------------------------------------------------------------------------------------------
 //* processGUI() handles the update of the main panel, the menu panel or the item panel
 //*--------------------------------------------------------------------------------------------------
@@ -766,37 +803,295 @@ void processGUI() {
 
         if (getWord(GSW,FSWL)==true) {  //while in menu mode transition to GUI mode (backup)
            setWord(&GSW,FSWL,false);
-           //setWord(&MSW,GUI,true);
-           //lcd->clear();
-           //backupMenu();
-           //showMenu();
+           setWord(&MSW,GUI,true);
+           lcd->clear();
+           backupMenu();
+           showMenu();
         }
 
         if (getWord(SSW,FSAVE)==true) { //restore menu after saving message
            setWord(&SSW,FSAVE,false);
-           //lcd->clear();
+           lcd->clear();
            showMenu();
         }
      }
 
+//*====================================================================================================
+//*-------------- Process main menu Panel (CMD=true GUI=true)
+//*====================================================================================================
+
+   if (getWord(MSW,CMD)==true && getWord(MSW,GUI)==true) {
+
+        if (getWord(GSW,ECW)==true) {  //while in menu mode turn knob clockwise
+           setWord(&GSW,ECW,false);
+           nextChild(+1);
+	   lcd->clear();
+           showMenu();
+        }
+
+        if (getWord(GSW,ECCW)==true) {  //while in menu mode turn knob counterclockwise
+           setWord(&GSW,ECCW,false);
+           nextChild(-1);
+           lcd->clear();
+           showMenu();
+        }
+
+        if (getWord(GSW,FSW)==true) {  //in GUI mode return to menu mode without commit of changes
+           setWord(&GSW,FSW,false);
+           setWord(&MSW,GUI,false);
+           lcd->clear();
+           restoreMenu();
+           showMenu();
+        }
+
+        if (getWord(GSW,FSWL)==true) {  //in GUI mode return to menu mode with commit of changes
+           setWord(&GSW,FSWL,false);
+           setWord(&MSW,GUI,false);
+           lcd->clear();
+           strcpy(LCD_Buffer,"Saving..");
+           lcd->println(0,0,LCD_Buffer);
+           saveMenu();
+           TSAVE=3000;
+
+        }
+     }
+
 }
-
 //*=====================================================================================================
-void procUpdateBW(MMS* p) {}
-void procUpdateVol(MMS* p) {}
-void procUpdateSql(MMS* p) {}
-void procUpdateRxCTCSS(MMS* p) {}
-void procUpdateTxCTCSS(MMS* p) {}
-void procUpdateOfs(MMS* p) {}
-void procUpdatePFE(MMS* p) {}
-void procUpdateLPF(MMS* p) {}
-void procUpdateHPF(MMS* p) {}
-void procUpdateHL(MMS* p) {}
-void procUpdatePD(MMS* p) {}
-void procUpdateBacklight(MMS* p) {}
-void procUpdateStep(MMS* p) {}
-void procUpdateWatchdog(MMS* p) {}
+void procUpdateBW(MMS* p) {
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateBW() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 1) {
+        p->mVal=1;
+     }
+     if (d==nullptr) {return;}
+     (p->mVal == 1 ? (void)d->setGBW(true) : (void)d->setGBW(false));
+     d->sendSetGroup();
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateBW() GBW is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
 
+
+}
+void procUpdateVol(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateVol() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 8) {
+        p->mVal=8;
+     }
+     if (d==nullptr) {return;}
+     d->setVol(p->mVal);
+     d->sendSetVolume();
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateVol() Vol is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+     return;
+
+}
+void procUpdateSql(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateSql() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 8) {
+        p->mVal=8;
+     }
+     if (d==nullptr) {return;}
+     d->setSQL(p->mVal);
+     d->sendSetGroup();
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateVol() SQL is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+     return;
+}
+void procUpdateRxCTCSS(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateRxCTCSS() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 38) {
+        p->mVal=38;
+     }
+     if (d==nullptr) {return;}
+     d->setRxCTCSS(p->mVal);
+     d->sendSetGroup();
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateRxCTCSS() CTCSS is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+
+}
+void procUpdateTxCTCSS(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateTxCTCSS() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 38) {
+        p->mVal=38;
+     }
+     if (d==nullptr) {return;}
+     d->setTxCTCSS(p->mVal);
+     d->sendSetGroup();
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateTxCTCSS() CTCSS is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+}
+void procUpdateOfs(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateOfs() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 2) {
+        p->mVal=2;
+     }
+     if (vfo==nullptr) {return;}
+     switch(p->mVal) {
+	case 0 : {
+		  vfo->setShift(0.0);
+ 		  break;
+		 }
+	case 1 : {
+		  vfo->setShift(+600000.0);
+ 		  break;
+		 }
+	case 2 : {
+		  vfo->setShift(-600000.0);
+ 		  break;
+		 }
+     }
+     if (d==nullptr) {return;}
+     d->setTFW(d->getRFW()+(vfo->getShift()/1000000));
+     d->sendSetGroup();
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateTxCTCSS() Offseet is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+}
+void procUpdatePFE(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdatePFE() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 1) {
+        p->mVal=1;
+     }
+     if (d==nullptr) {return;}
+    (p->mVal == 1 ? d->setPEF(true) : d->setPEF(false));
+     d->sendSetFilter();
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdatePEF() PEF is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+
+
+}
+void procUpdateLPF(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateLPF() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 1) {
+        p->mVal=1;
+     }
+     if (d==nullptr) {return;}
+     (p->mVal == 1 ? d->setLPF(true) : d->setLPF(false));
+     d->sendSetFilter();
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateLPF() LPF is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+
+
+
+}
+void procUpdateHPF(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateHPF() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 1) {
+        p->mVal=1;
+     }
+     if (d==nullptr) {return;}
+     (p->mVal == 1 ? d->setHPF(true) : d->setHPF(false));
+     d->sendSetFilter();
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateHPF() HPF is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+
+
+}
+void procUpdateHL(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateHL() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 1) {
+        p->mVal=1;
+     }
+     if (d==nullptr) {return;}
+     (p->mVal == 1 ? d->setHL(true) : d->setHL(false));
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateHPF() HL is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+
+}
+void procUpdatePD(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateHL() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 1) {
+        p->mVal=1;
+     }
+     if (d==nullptr) {return;}
+     (p->mVal == 1 ? d->setPD(true) : d->setPD(false));
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateHPF() PD is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+}
+void procUpdateBacklight(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateBacklight() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 60) {
+        p->mVal=60;
+     }
+     backlight=p->mVal*1000;
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateBacklight() Backlight is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+
+}
+void procUpdateStep(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateStep() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 1) {
+        p->mVal=1;
+     }
+     if (vfo==nullptr) {return;}
+     switch(p->mVal) {
+	case 0 : {
+		  vfo->setVFOStep(VFOA,VFO_STEP_10KHz);
+		  vfo->setVFOStep(VFOB,VFO_STEP_10KHz);
+ 		  break;
+		 }
+	case 1 : {
+		  vfo->setVFOStep(VFOA,VFO_STEP_5KHz);
+		  vfo->setVFOStep(VFOB,VFO_STEP_5KHz);
+ 		  break;
+		 }
+     }
+     if (d==nullptr) {return;}
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateStep() Step is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+
+}
+void procUpdateWatchdog(MMS* p) {
+
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procUpdateWatchdog() \n",PROGRAMID) : _NOP);
+     if (p->mVal < 0) {
+        p->mVal=0;
+     }
+     if (p->mVal > 60) {
+        p->mVal=60;
+     }
+     watchdog=p->mVal*1000;
+     (TRACE>=0x02 ? fprintf(stderr,"%s:procUpdateWatchdog() Watchdog is now(%d)\n",PROGRAMID,p->mVal) : _NOP);
+
+
+}
+//*------- Procedure to manage content of the display
 void procChangeVol(MMS* p) {
 
 char f[9];
@@ -804,7 +1099,7 @@ char lev[2];
 int  k = 255;
 char c = k;
 
-     (TRACE>=0x02 ? fprintf(stderr,"%s:procChangeVol %d [%s] \n",PROGRAMID,p->mVal,f) : _NOP);
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procChangeVol %d [%s] \n",PROGRAMID,p->mVal,f) : _NOP);
 
      sprintf(lev,"%c", c); //prints A
      if (p->mVal>8) { p->mVal=8;}
@@ -842,7 +1137,7 @@ void procChangeRxCTCSS(MMS* p) {
 
 char buffer[16];
 
-     (TRACE>=0x02 ? fprintf(stderr,"%s:procChangeRxCTCSS() \n",PROGRAMID) : _NOP);
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procChangeRxCTCSS() \n",PROGRAMID) : _NOP);
      if (p->mVal<0) {p->mVal=0;}
      if (p->mVal>38) {p->mVal=38;}
      if (p->mVal!=0) {
@@ -857,7 +1152,7 @@ void procChangeTxCTCSS(MMS* p) {
 
 char buffer[16];
 
-     (TRACE>=0x02 ? fprintf(stderr,"%s:procChangeTxCTCSS() \n",PROGRAMID) : _NOP);
+     (TRACE>=0x03 ? fprintf(stderr,"%s:procChangeTxCTCSS() \n",PROGRAMID) : _NOP);
      if (p->mVal<0) {p->mVal=0;}
      if (p->mVal>38) {p->mVal=38;}
      if (p->mVal!=0) {
@@ -881,11 +1176,11 @@ void setupMMS() {
      mnu_Rx_CTCSS= new MMS(4,(char*)"Rx CTCSS",procChangeRxCTCSS,procUpdateRxCTCSS);
      mnu_Tx_CTCSS= new MMS(5,(char*)"Tx CTCSS",procChangeTxCTCSS,procUpdateTxCTCSS);
      mnu_Ofs =  new MMS(6,(char*)"Offset",NULL,procUpdateOfs);
-     mnu_PFE =  new MMS(7,(char*)"Pre-Emphasis",NULL,procUpdatePFE);
-     mnu_LPF =  new MMS(8,(char*)"Low Pass Filter",NULL,procUpdateLPF);
-     mnu_HPF =  new MMS(9,(char*)"High Pass Filter",NULL,procUpdateHPF);
+     mnu_PFE =  new MMS(7,(char*)"PEF",NULL,procUpdatePFE);
+     mnu_LPF =  new MMS(8,(char*)"LPF",NULL,procUpdateLPF);
+     mnu_HPF =  new MMS(9,(char*)"HPF",NULL,procUpdateHPF);
      mnu_HL  =  new MMS(10,(char*)"Power",NULL,procUpdateHL);
-     mnu_PD  =  new MMS(11,(char*)"Power Saving",NULL,procUpdatePD);
+     mnu_PD  =  new MMS(11,(char*)"Pwr Saving",NULL,procUpdatePD);
      mnu_Backlight = new MMS(12,(char*)"Backlight",NULL,procUpdateBacklight);
      mnu_Step=  new MMS(13,(char*)"Step",NULL,procUpdateStep);
      mnu_Watchdog = new MMS(14,(char*)"Watchdog",NULL,procUpdateWatchdog);
@@ -956,8 +1251,8 @@ void setupMMS() {
      mnu_HPF_Off = new MMS(0,(char*)"Off",NULL,NULL);
      mnu_HPF_On  = new MMS(1,(char*)"On",NULL,NULL);
 
-     mnu_HL_Off = new MMS(0,(char*)"Low Power",NULL,NULL);
-     mnu_HL_On  = new MMS(1,(char*)"High Power",NULL,NULL);
+     mnu_HL_Off = new MMS(0,(char*)"Low",NULL,NULL);
+     mnu_HL_On  = new MMS(1,(char*)"High",NULL,NULL);
 
      mnu_PD_Off = new MMS(0,(char*)"Off",NULL,NULL);
      mnu_PD_On  = new MMS(1,(char*)"On",NULL,NULL);
